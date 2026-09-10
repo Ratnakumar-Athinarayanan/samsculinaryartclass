@@ -1,9 +1,5 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import webinarsHandler from './api/webinars.js';
-import registrationsHandler from './api/registrations.js';
-import onboardingHandler from './api/onboarding.js';
-import uploadHandler from './api/upload.js';
 
 function apiDevServerPlugin() {
   return {
@@ -41,17 +37,28 @@ function apiDevServerPlugin() {
           }
         }
 
-        if (urlObj.pathname === '/api/webinars') {
-          return webinarsHandler(req, res);
-        }
-        if (urlObj.pathname === '/api/registrations') {
-          return registrationsHandler(req, res);
-        }
-        if (urlObj.pathname === '/api/onboarding') {
-          return onboardingHandler(req, res);
-        }
-        if (urlObj.pathname === '/api/upload') {
-          return uploadHandler(req, res);
+        try {
+          if (urlObj.pathname === '/api/webinars') {
+            const { default: webinarsHandler } = await import('./api/webinars.js');
+            return webinarsHandler(req, res);
+          }
+          if (urlObj.pathname === '/api/registrations') {
+            const { default: registrationsHandler } = await import('./api/registrations.js');
+            return registrationsHandler(req, res);
+          }
+          if (urlObj.pathname === '/api/onboarding') {
+            const { default: onboardingHandler } = await import('./api/onboarding.js');
+            return onboardingHandler(req, res);
+          }
+          if (urlObj.pathname === '/api/upload') {
+            const { default: uploadHandler } = await import('./api/upload.js');
+            return uploadHandler(req, res);
+          }
+        } catch (err) {
+          console.error('API middleware error:', err);
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({ error: 'Internal Server Error' }));
         }
 
         next();
