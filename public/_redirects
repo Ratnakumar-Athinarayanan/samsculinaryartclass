@@ -1,0 +1,3 @@
+/api/webinars       /.netlify/functions/webinars       200
+/api/registrations    /.netlify/functions/registrations    200
+/*                    /index.html                        200

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('sams-theme');
+          if (saved === 'light') {
+            document.documentElement.classList.remove('dark');
+          } else {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    
+    <!-- SEO Meta Tags -->
+    <title>Sam's Culinary Art Classes - Professional Cooking & Baking Classes in Chennai</title>
+    <meta name="description" content="Join Sam's Culinary Art Classes in Kodambakkam, Chennai. Learn professional cooking and baking, including South Indian, North Indian, Chinese, Continental cuisines, and special cake workshop programs." />
+    <meta name="keywords" content="cooking classes chennai, baking classes kodambakkam, culinary arts, vahitha jeevanandam, non veg cooking classes, cake baking courses, kids baking camp" />
+    <meta name="author" content="Mrs. M. Vahitha Jeevanandam" />
+
+    <!-- Browser Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/logo-circle.svg" />
+    <link rel="shortcut icon" type="image/svg+xml" href="/logo-circle.svg" />
+    <link rel="apple-touch-icon" href="/logo-circle.svg" />
+
+    <!-- Open Graph / Facebook / WhatsApp Rich Link Previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://samsculinaryartclasses.com" />
+    <meta property="og:title" content="Sam's Culinary Art Classes | Cooking & Baking in Chennai" />
+    <meta property="og:description" content="Discover A to Z secrets of multicuisine cooking and professional cake baking with hands-on practice. Join us today!" />
+    <meta property="og:image" content="https://samsculinaryartclasses.com/logo.jpeg" />
+    <meta property="og:site_name" content="Sam's Culinary Art Classes" />
+
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sam's Culinary Art Classes | Cooking & Baking in Chennai" />
+    <meta name="twitter:description" content="Discover A to Z secrets of multicuisine cooking and professional cake baking with hands-on practice." />
+    <meta name="twitter:image" content="https://samsculinaryartclasses.com/logo.jpeg" />
+
+    <!-- Google Fonts Link Integration -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Marcellus&amp;family=Montserrat:wght@300;400;500;600;700&amp;family=Playball&amp;display=swap" rel="stylesheet" />
+
+    <!-- Schema.org Structured LocalBusiness JSON-LD Metadata -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "School",
+        "name": "Sam's Culinary Art Classes",
+        "description": "Professional cooking and baking classes in Chennai, offering hands-on training in South Indian, North Indian, Chinese, Continental cuisines, and special baking workshops.",
+        "image": "https://samsculinaryartclasses.com/logo.jpeg",
+        "founder": {
+          "@type": "Person",
+          "name": "Mrs. M. Vahitha Jeevanandam",
+          "jobTitle": "Founder & Instructor"
+        },
+        "foundingDate": "2013-05",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "18/21, Vishwanathapuram 3rd Street, Kodambakkam",
+          "addressLocality": "Chennai",
+          "addressRegion": "Tamil Nadu",
+          "postalCode": "600024",
+          "addressCountry": "IN"
+        },
+        "geo": {
+          "@type": "GeoCoordinates",
+          "latitude": "13.0489",
+          "longitude": "80.2206"
+        },
+        "telephone": "+91-8939648457",
+        "email": "samsculinaryartclass@gmail.com",
+        "url": "https://samsculinaryartclasses.com",
+        "priceRange": "$$",
+        "sameAs": [
+          "https://www.facebook.com/SamsCulinaryArtClass/",
+          "https://www.instagram.com/samsculinaryartclassofficial/?hl=en"
+        ],
+        "hasOfferCatalog": {
+          "@type": "OfferCatalog",
+          "name": "Culinary & Baking Courses",
+          "itemListElement": [
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Course",
+                "name": "South Indian Cuisine",
+                "description": "Traditional tiffin, veg & non-veg specialties from South India."
+              }
+            },
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Course",
+                "name": "North Indian Cuisine",
+                "description": "Authentic North Indian dishes, rotis, curries, and side dishes."
+              }
+            },
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Course",
+                "name": "Baking Workshop",
+                "description": "Cakes, icing, healthy muffins, cupcakes, pastries, breads, pastas, and pizzas."
+              }
+            }
+          ]
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

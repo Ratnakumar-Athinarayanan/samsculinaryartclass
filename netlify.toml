@@ -1,0 +1,24 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/webinars"
+  to = "/.netlify/functions/webinars"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/registrations"
+  to = "/.netlify/functions/registrations"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
