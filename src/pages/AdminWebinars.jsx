@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { message, Modal, DatePicker, Pagination, ConfigProvider, theme as antdTheme } from 'antd';
+import { message, Modal, DatePicker, Pagination, ConfigProvider, Image, theme as antdTheme } from 'antd';
 import { 
   PlusOutlined, 
   EditOutlined, 
@@ -36,7 +36,11 @@ import {
   GlobalOutlined,
   HomeOutlined,
   CreditCardOutlined,
-  CheckOutlined
+  CheckOutlined,
+  IdcardOutlined,
+  CompassOutlined,
+  SafetyCertificateOutlined,
+  ZoomInOutlined
 } from '@ant-design/icons';
 import useSEO from '../hooks/useSEO';
 import TiltCard from '../components/TiltCard';
@@ -55,7 +59,8 @@ import {
   getOnboardingApplications,
   updateApplicationStatus,
   deleteApplication,
-  exportOnboardingToCSV
+  exportOnboardingToCSV,
+  resendSelectionEmail
 } from '../services/onboardingService';
 
 export default function AdminWebinars() {
@@ -82,6 +87,7 @@ export default function AdminWebinars() {
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [isDeletingOnboardingId, setIsDeletingOnboardingId] = useState(null);
   const [isLoadingOnboarding, setIsLoadingOnboarding] = useState(false);
+  const [docPreviewModal, setDocPreviewModal] = useState({ open: false, url: '', title: '' });
 
   // Responsive Theme Detection (Light vs Dark Mode)
   const [isDarkMode, setIsDarkMode] = useState(() =>
@@ -398,17 +404,68 @@ export default function AdminWebinars() {
     }
   };
 
-  // Handle Onboarding Status Update
+  // Handle Onboarding Status Update & Automated Email Dispatch
   const handleStatusChange = async (applicantId, newStatus) => {
     try {
-      await updateApplicationStatus(applicantId, newStatus);
-      message.success(`Application marked as "${newStatus}"`);
+      const res = await updateApplicationStatus(applicantId, newStatus);
+      if (newStatus === 'Verified / Enrolled') {
+        if (res?.emailResult?.simulated) {
+          message.warning({
+            content: `Status marked as "Verified / Enrolled"! ⚠️ Note: Email could not reach student's inbox because SMTP_USER & SMTP_PASS (Gmail App Password) are not configured in .env.`,
+            duration: 9
+          });
+        } else if (res?.emailResult?.success) {
+          message.success({
+            content: `Application marked as "Verified / Enrolled"! Real selection email sent to student (${res.emailResult.to}).`,
+            duration: 5
+          });
+        } else if (res?.emailResult?.error) {
+          message.error({
+            content: `Status updated, but email delivery failed: ${res.emailResult.error}`,
+            duration: 8
+          });
+        }
+      } else {
+        message.success(`Application marked as "${newStatus}"`);
+      }
       await loadOnboarding();
       if (selectedApplicant && selectedApplicant.id === applicantId) {
-        setSelectedApplicant((prev) => ({ ...prev, status: newStatus }));
+        setSelectedApplicant((prev) => ({
+          ...prev,
+          status: newStatus,
+          emailNotificationSent: res?.data?.emailNotificationSent || false,
+          emailStatus: res?.data?.emailStatus || 'Pending'
+        }));
       }
     } catch (err) {
       message.error('Failed to update application status.');
+    }
+  };
+
+  // Handle Manual Resend of Selection Email
+  const handleResendEmail = async (applicantId, applicantEmail) => {
+    try {
+      const res = await resendSelectionEmail(applicantId);
+      if (res?.emailResult?.simulated) {
+        message.warning({
+          content: `⚠️ Real email NOT sent: SMTP credentials are not configured in .env. Please add SMTP_USER & SMTP_PASS (Gmail App Password) in .env to deliver real emails to ${applicantEmail}.`,
+          duration: 9
+        });
+      } else if (res?.emailResult?.success) {
+        message.success(`Selection email delivered to ${applicantEmail}!`);
+      } else {
+        message.error(`Email delivery failed: ${res?.emailResult?.error || 'Unknown error'}`);
+      }
+      await loadOnboarding();
+      if (selectedApplicant && selectedApplicant.id === applicantId) {
+        setSelectedApplicant((prev) => ({
+          ...prev,
+          emailNotificationSent: res?.data?.emailNotificationSent || false,
+          emailStatus: res?.data?.emailStatus || 'Pending'
+        }));
+      }
+    } catch (err) {
+      message.error('Failed to dispatch selection email.');
     }
   };
 
@@ -1143,10 +1200,10 @@ export default function AdminWebinars() {
                         <tr>
                           <th>Application No</th>
                           <th>Date</th>
-                          <th>Student Name</th>
+                          <th>Student &amp; Residency</th>
                           <th>Contact Details</th>
-                          <th>Payment / Proof</th>
-                          <th>Status</th>
+                          <th>ID Proof &amp; Payment</th>
+                          <th>Status &amp; Email</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
@@ -1168,9 +1225,24 @@ export default function AdminWebinars() {
                               </div>
                             </td>
 
-                            {/* Student Name */}
+                            {/* Student Name & Residency Status */}
                             <td>
-                              <strong style={{ fontSize: '0.95rem', color: isDarkMode ? 'var(--text-white)' : 'var(--text-dark)' }}>{app.name}</strong>
+                              <div>
+                                <strong style={{ fontSize: '0.95rem', color: isDarkMode ? 'var(--text-white)' : 'var(--text-dark)', display: 'block' }}>
+                                  {app.name}
+                                </strong>
+                                <div style={{ marginTop: '4px' }}>
+                                  {app.applicantType === 'NRI' ? (
+                                    <span className="badge badge-warning" style={{ fontSize: '0.72rem', padding: '2px 8px', letterSpacing: '0.3px' }}>
+                                      🌐 NRI - {app.country || 'Overseas'}
+                                    </span>
+                                  ) : (
+                                    <span className="badge badge-success" style={{ fontSize: '0.72rem', padding: '2px 8px', letterSpacing: '0.3px' }}>
+                                      🇮🇳 Indian
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </td>
 
                             {/* Contact Details */}
@@ -1193,30 +1265,66 @@ export default function AdminWebinars() {
                               </div>
                             </td>
 
-                            {/* Payment / Proof */}
+                            {/* ID Proof & Payment */}
                             <td>
-                              <div style={{ fontSize: '0.85rem' }}>
-                                <strong style={{ color: isDarkMode ? '#22c55e' : '#15803d', fontWeight: '800', fontSize: '0.95rem' }}>₹{app.amountPaid || 500}</strong>
-                                {app.proofImageUrl ? (
-                                  <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <a href={app.proofImageUrl} target="_blank" rel="noopener noreferrer" title="Click to view full payment screenshot">
+                              <div style={{ fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {/* ID Proof Thumb on Cloudinary */}
+                                {app.idProofImageUrl ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDocPreviewModal({ open: true, url: app.idProofImageUrl, title: `${app.name} - ${app.idProofType || 'ID'} Proof Document` })}
+                                      style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex' }}
+                                      title={`Click to view ${app.idProofType || 'ID'} Proof`}
+                                    >
+                                      <img
+                                        src={app.idProofImageUrl}
+                                        alt="ID Proof thumb"
+                                        style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '6px', border: isDarkMode ? '1.5px solid #22c55e' : '1.5px solid #16a34a', cursor: 'pointer' }}
+                                      />
+                                    </button>
+                                    <span style={{ fontSize: '0.74rem', color: isDarkMode ? '#4ade80' : '#15803d', fontWeight: '700' }}>
+                                      🪪 {app.idProofType || 'ID Proof'}
+                                    </span>
+                                    {app.idProofNumber && (
+                                      <span style={{ fontSize: '0.7rem', color: isDarkMode ? 'var(--mango-yellow)' : '#b45309', fontFamily: 'monospace' }}>
+                                        No: {app.idProofNumber}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: '0.72rem', color: isDarkMode ? 'var(--text-muted)' : '#64748b' }}>
+                                    🪪 {app.idProofType || 'No ID file'}
+                                    {app.idProofNumber ? ` (${app.idProofNumber})` : ''}
+                                  </div>
+                                )}
+
+                                {/* Payment Proof Thumb */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <strong style={{ color: isDarkMode ? '#22c55e' : '#15803d', fontWeight: '800', fontSize: '0.88rem' }}>₹{app.amountPaid || 500}</strong>
+                                  {app.proofImageUrl ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDocPreviewModal({ open: true, url: app.proofImageUrl, title: `${app.name} - ₹${app.amountPaid || 500} Payment Proof Screenshot` })}
+                                      style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex' }}
+                                      title="Click to view payment screenshot"
+                                    >
                                       <img
                                         src={app.proofImageUrl}
                                         alt="Payment proof thumb"
-                                        style={{ width: '38px', height: '38px', objectFit: 'cover', borderRadius: '6px', border: isDarkMode ? '1px solid var(--mango-yellow)' : '1.5px solid #d97706', cursor: 'pointer' }}
+                                        style={{ width: '28px', height: '28px', objectFit: 'cover', borderRadius: '4px', border: isDarkMode ? '1px solid var(--mango-yellow)' : '1px solid #d97706', cursor: 'pointer' }}
                                       />
-                                    </a>
-                                    <span style={{ fontSize: '0.72rem', color: isDarkMode ? 'var(--mango-yellow)' : '#b45309', fontWeight: '600' }}>Proof attached</span>
-                                  </div>
-                                ) : (
-                                  <div style={{ fontSize: '0.72rem', color: isDarkMode ? 'var(--text-muted)' : '#64748b', marginTop: '2px' }}>
-                                    {app.bankDetails ? `Ref: ${app.bankDetails}` : 'No image'}
-                                  </div>
-                                )}
+                                    </button>
+                                  ) : (
+                                    <span style={{ fontSize: '0.72rem', color: isDarkMode ? 'var(--text-muted)' : '#64748b' }}>
+                                      {app.bankDetails ? `Ref: ${app.bankDetails.slice(0, 10)}...` : 'No screenshot'}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
 
-                            {/* Status Dropdown */}
+                            {/* Status Dropdown & Email Indicator */}
                             <td>
                               <select
                                 value={app.status || 'Pending Verification'}
@@ -1243,6 +1351,14 @@ export default function AdminWebinars() {
                                 <option value="Verified / Enrolled" style={{ background: isDarkMode ? '#141c16' : '#ffffff', color: isDarkMode ? '#ffffff' : '#16a34a' }}>Verified / Enrolled</option>
                                 <option value="Follow-up" style={{ background: isDarkMode ? '#141c16' : '#ffffff', color: isDarkMode ? '#ffffff' : '#d97706' }}>Follow-up</option>
                               </select>
+
+                              {/* Automated Selection Email Status */}
+                              {app.status === 'Verified / Enrolled' && (
+                                <div style={{ marginTop: '5px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px', color: app.emailNotificationSent ? '#22c55e' : '#f59e0b', fontWeight: '600' }}>
+                                  <MailOutlined />
+                                  <span>{app.emailNotificationSent ? 'Email Delivered (24h)' : '⚠️ Needs SMTP in .env'}</span>
+                                </div>
+                              )}
                             </td>
 
                             {/* Actions */}
@@ -1251,6 +1367,16 @@ export default function AdminWebinars() {
                                 <button onClick={() => setSelectedApplicant(app)} className="action-btn" title="View Full Application Details">
                                   <EyeOutlined />
                                 </button>
+                                {app.status === 'Verified / Enrolled' && (
+                                  <button
+                                    onClick={() => handleResendEmail(app.id, app.email)}
+                                    className="action-btn"
+                                    title="Resend Selection Email (24h turnaround notice)"
+                                    style={{ color: 'var(--mango-yellow)' }}
+                                  >
+                                    <SendOutlined />
+                                  </button>
+                                )}
                                 <a
                                   href={`https://wa.me/${(app.phone || '').replace(/[^0-9]/g, '')}?text=Hi%20${encodeURIComponent(app.name)}!%20Regarding%20your%20admission%20application%20(${app.applicationNumber})%20at%20Sam's%20Culinary%20Art%20Class.`}
                                   target="_blank"
@@ -1367,18 +1493,29 @@ export default function AdminWebinars() {
                 </div>
 
                 <div style={{ background: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', opacity: isDarkMode ? 0.7 : 0.85, color: isDarkMode ? 'inherit' : '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Father&apos;s Name</span>
-                  <strong style={{ color: isDarkMode ? '#ffffff' : '#1a241c' }}>{selectedApplicant.fatherName || 'N/A'}</strong>
+                  <span style={{ fontSize: '0.75rem', opacity: isDarkMode ? 0.7 : 0.85, color: isDarkMode ? 'inherit' : '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Residency &amp; Nationality</span>
+                  <strong style={{ color: isDarkMode ? '#ffffff' : '#1a241c' }}>
+                    {selectedApplicant.applicantType === 'NRI' ? `🌐 NRI - ${selectedApplicant.country || 'Overseas'}` : '🇮🇳 Indian Resident'}
+                  </strong>
                 </div>
 
                 <div style={{ background: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', opacity: isDarkMode ? 0.7 : 0.85, color: isDarkMode ? 'inherit' : '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Mother&apos;s Name</span>
-                  <strong style={{ color: isDarkMode ? '#ffffff' : '#1a241c' }}>{selectedApplicant.motherName || 'N/A'}</strong>
+                  <span style={{ fontSize: '0.75rem', opacity: isDarkMode ? 0.7 : 0.85, color: isDarkMode ? 'inherit' : '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Verified Document Type</span>
+                  <strong style={{ color: isDarkMode ? 'var(--mango-yellow)' : '#b45309' }}>🪪 {selectedApplicant.idProofType || 'Aadhar'}</strong>
                 </div>
 
                 <div style={{ background: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', opacity: isDarkMode ? 0.7 : 0.85, color: isDarkMode ? 'inherit' : '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Nationality</span>
-                  <strong style={{ color: isDarkMode ? '#ffffff' : '#1a241c' }}>{selectedApplicant.nationality || 'Indian'}</strong>
+                  <span style={{ fontSize: '0.75rem', opacity: isDarkMode ? 0.7 : 0.85, color: isDarkMode ? 'inherit' : '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Document / ID Number</span>
+                  <strong style={{ color: isDarkMode ? '#ffffff' : '#1a241c', fontFamily: 'monospace', fontSize: '0.95rem' }}>
+                    {selectedApplicant.idProofNumber || 'Not specified'}
+                  </strong>
+                </div>
+
+                <div style={{ background: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '0.75rem', opacity: isDarkMode ? 0.7 : 0.85, color: isDarkMode ? 'inherit' : '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Parents Names</span>
+                  <strong style={{ color: isDarkMode ? '#ffffff' : '#1a241c' }}>
+                    F: {selectedApplicant.fatherName || 'N/A'} • M: {selectedApplicant.motherName || 'N/A'}
+                  </strong>
                 </div>
 
                 <div style={{ background: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
@@ -1402,18 +1539,143 @@ export default function AdminWebinars() {
                     <p style={{ margin: '4px 0 0 0', fontWeight: '700', color: isDarkMode ? 'var(--mango-yellow)' : '#92400e' }}>{selectedApplicant.bankDetails}</p>
                   </div>
                 )}
+
+                {/* Email Notification Audit Banner */}
+                <div style={{ gridColumn: '1 / -1', background: selectedApplicant.emailNotificationSent ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.1)', border: selectedApplicant.emailNotificationSent ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)', padding: '12px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <MailOutlined style={{ fontSize: '16px', color: selectedApplicant.emailNotificationSent ? '#22c55e' : '#f59e0b' }} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: '600', color: selectedApplicant.emailNotificationSent ? '#22c55e' : '#f59e0b' }}>
+                      {selectedApplicant.emailNotificationSent
+                        ? `Selection Email Delivered to ${selectedApplicant.email} (24h turnaround SLA notice sent)`
+                        : selectedApplicant.status === 'Verified / Enrolled'
+                          ? '⚠️ Live Email Not Sent: SMTP_USER & SMTP_PASS (Gmail App Password) are missing in .env'
+                          : 'Selection Email Pending (Automatically sent when marked Verified / Enrolled)'}
+                    </span>
+                  </div>
+                  {selectedApplicant.emailSentAt && (
+                    <span style={{ fontSize: '0.75rem', opacity: 0.75 }}>
+                      Delivered: {new Date(selectedApplicant.emailSentAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Uploaded Verification Documents (ID Proof & Payment Screenshot) */}
+              <div style={{ marginBottom: '22px' }}>
+                <h4 style={{ fontSize: '0.98rem', fontWeight: '700', marginBottom: '12px', color: isDarkMode ? '#ffffff' : '#1a241c', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <SafetyCertificateOutlined style={{ color: 'var(--mango-yellow)' }} />
+                  <span>Submitted Verification Documents</span>
+                </h4>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                  {/* Card 1: ID Proof Document */}
+                  <div style={{ background: isDarkMode ? 'rgba(255,255,255,0.02)' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e2e8f0', borderRadius: '12px', padding: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <strong style={{ fontSize: '0.88rem', color: isDarkMode ? 'var(--mango-yellow)' : '#b45309' }}>
+                        🪪 {selectedApplicant.idProofType || 'Identity Proof'} Document
+                      </strong>
+                      <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>
+                        Cloudinary CDN
+                      </span>
+                    </div>
+
+                    {selectedApplicant.idProofImageUrl ? (
+                      <div>
+                        <div style={{ borderRadius: '8px', overflow: 'hidden', border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', marginBottom: '10px', height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0b100c' }}>
+                          <Image
+                            src={selectedApplicant.idProofImageUrl}
+                            alt={`${selectedApplicant.idProofType} Document`}
+                            style={{ maxWidth: '100%', maxHeight: '180px', objectFit: 'contain' }}
+                            preview={{
+                              mask: (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+                                  <ZoomInOutlined /> Click to Zoom
+                                </div>
+                              )
+                            }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDocPreviewModal({
+                            open: true,
+                            url: selectedApplicant.idProofImageUrl,
+                            title: `${selectedApplicant.name} - ${selectedApplicant.idProofType || 'ID'} Proof Document`
+                          })}
+                          className="btn-outline"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '7px 14px', width: '100%', justifyContent: 'center', cursor: 'pointer' }}
+                        >
+                          <EyeOutlined />
+                          <span>View Full Size on Screen</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '30px 10px', textAlign: 'center', opacity: 0.6, fontSize: '0.85rem' }}>
+                        No ID proof image file attached.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card 2: Payment Proof Screenshot */}
+                  <div style={{ background: isDarkMode ? 'rgba(255,255,255,0.02)' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e2e8f0', borderRadius: '12px', padding: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <strong style={{ fontSize: '0.88rem', color: isDarkMode ? '#22c55e' : '#15803d' }}>
+                        💳 Payment Proof Screenshot
+                      </strong>
+                      <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>
+                        ₹{selectedApplicant.amountPaid || 500} Confirmed
+                      </span>
+                    </div>
+
+                    {selectedApplicant.proofImageUrl ? (
+                      <div>
+                        <div style={{ borderRadius: '8px', overflow: 'hidden', border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', marginBottom: '10px', height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0b100c' }}>
+                          <Image
+                            src={selectedApplicant.proofImageUrl}
+                            alt="Payment Proof Screenshot"
+                            style={{ maxWidth: '100%', maxHeight: '180px', objectFit: 'contain' }}
+                            preview={{
+                              mask: (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+                                  <ZoomInOutlined /> Click to Zoom
+                                </div>
+                              )
+                            }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDocPreviewModal({
+                            open: true,
+                            url: selectedApplicant.proofImageUrl,
+                            title: `${selectedApplicant.name} - Payment Proof (₹${selectedApplicant.amountPaid || 500})`
+                          })}
+                          className="btn-outline"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '7px 14px', width: '100%', justifyContent: 'center', cursor: 'pointer' }}
+                        >
+                          <EyeOutlined />
+                          <span>View Full Size Screenshot</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '30px 10px', textAlign: 'center', opacity: 0.6, fontSize: '0.85rem' }}>
+                        No payment screenshot file attached.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Modal Footer Actions */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: isDarkMode ? '1px solid var(--border-color)' : '1px solid #e2e8f0', paddingTop: '16px', marginTop: '10px' }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={() => handleStatusChange(selectedApplicant.id, 'Verified / Enrolled')}
                     className="btn-primary"
                     style={{ background: 'var(--green-primary)', borderColor: 'var(--green-primary)', padding: '8px 16px', fontSize: '0.85rem' }}
                   >
-                    <CheckOutlined /> Mark Verified
+                    <CheckOutlined /> Mark Verified (Sends Email)
                   </button>
                   <button
                     type="button"
@@ -1423,6 +1685,16 @@ export default function AdminWebinars() {
                   >
                     Mark Follow-up
                   </button>
+                  {selectedApplicant.status === 'Verified / Enrolled' && (
+                    <button
+                      type="button"
+                      onClick={() => handleResendEmail(selectedApplicant.id, selectedApplicant.email)}
+                      className="btn-outline"
+                      style={{ padding: '8px 16px', fontSize: '0.85rem', color: 'var(--mango-yellow)', borderColor: 'var(--mango-yellow)' }}
+                    >
+                      <SendOutlined /> Resend Email
+                    </button>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -1437,6 +1709,67 @@ export default function AdminWebinars() {
                     <span>WhatsApp Student</span>
                   </a>
                 </div>
+              </div>
+            </div>
+          )}
+        </Modal>
+      </ConfigProvider>
+
+      {/* IN-APP HIGH-RES DOCUMENT & PROOF PREVIEW LIGHTBOX MODAL */}
+      <ConfigProvider
+        theme={{
+          algorithm: isDarkMode ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+          token: {
+            colorPrimary: '#e8a710',
+            colorBgElevated: isDarkMode ? '#141c16' : '#ffffff',
+            colorBorderSecondary: isDarkMode ? 'rgba(232, 167, 16, 0.3)' : 'rgba(25, 65, 33, 0.15)',
+            colorText: isDarkMode ? '#ffffff' : '#1a241c',
+            borderRadiusLG: 16
+          }
+        }}
+      >
+        <Modal
+          open={docPreviewModal.open}
+          onCancel={() => setDocPreviewModal({ open: false, url: '', title: '' })}
+          footer={null}
+          centered
+          width={800}
+          zIndex={1050}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: isDarkMode ? 'var(--mango-yellow)' : '#194121' }}>
+              <EyeOutlined />
+              <span>{docPreviewModal.title || 'Document Full Preview'}</span>
+            </div>
+          }
+        >
+          {docPreviewModal.url && (
+            <div style={{ textAlign: 'center', padding: '12px 0' }}>
+              <div style={{ borderRadius: '10px', overflow: 'hidden', background: isDarkMode ? '#0a0f0b' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '260px', maxHeight: '70vh' }}>
+                <img
+                  src={docPreviewModal.url}
+                  alt={docPreviewModal.title}
+                  style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '16px' }}>
+                <a
+                  href={docPreviewModal.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary btn-mango"
+                  style={{ padding: '8px 20px', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <span>Open Full Size in Browser Tab</span>
+                  <span>↗</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setDocPreviewModal({ open: false, url: '', title: '' })}
+                  className="btn-outline"
+                  style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                >
+                  Close Preview
+                </button>
               </div>
             </div>
           )}

@@ -1,15 +1,34 @@
 import dotenv from 'dotenv';
 import { v2 as cloudinary } from 'cloudinary';
+import { deleteFromCloudinary } from './_cloudinary.js';
 
 export default async function handler(req, res) {
   dotenv.config({ override: true });
 
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
+  }
+
+  // DELETE /api/upload - Delete image from Cloudinary
+  if (req.method === 'DELETE') {
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+      const target = body.url || body.publicId || req.query?.url || req.query?.publicId;
+
+      if (!target) {
+        return res.status(400).json({ success: false, error: 'url or publicId is required for deletion' });
+      }
+
+      const delResult = await deleteFromCloudinary(target);
+      return res.status(200).json({ success: true, result: delResult });
+    } catch (delErr) {
+      console.error('API /api/upload DELETE error:', delErr);
+      return res.status(500).json({ success: false, error: delErr.message });
+    }
   }
 
   if (req.method !== 'POST') {

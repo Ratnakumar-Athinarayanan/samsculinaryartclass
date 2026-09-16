@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import {
   UserOutlined,
   MailOutlined,
@@ -30,7 +30,9 @@ import {
   BankOutlined,
   QrcodeOutlined,
   WhatsAppOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  IdcardOutlined,
+  CompassOutlined
 } from '@ant-design/icons';
 import useSEO from '../hooks/useSEO';
 import TiltCard from '../components/TiltCard';
@@ -47,9 +49,16 @@ export default function Onboarding() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
 
-  // Cloudinary image upload state
+  // Cloudinary image upload states
   const [proofPreview, setProofPreview] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // ID Proof Upload State (Max 2 MB)
+  const [idProofPreview, setIdProofPreview] = useState('');
+  const [isUploadingIdProof, setIsUploadingIdProof] = useState(false);
+
+  // In-app Document Lightbox Preview Modal State (Prevents blank screens)
+  const [previewModal, setPreviewModal] = useState({ open: false, url: '', title: '' });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -58,7 +67,12 @@ export default function Onboarding() {
     address: '',
     fatherName: '',
     motherName: '',
-    nationality: 'Indian',
+    applicantType: 'Indian', // 'Indian' | 'NRI'
+    country: 'India',
+    idProofType: 'Aadhar', // Indian: 'Aadhar' | 'Driving license' | 'Student ID'; NRI: 'Passport' | 'Citizenship' | 'VISA'
+    idProofNumber: '',
+    idProofImageUrl: '',
+    idProofSize: 0,
     purposeOfJoining: '',
     bankDetails: '',
     amountPaid: 500,
@@ -76,6 +90,9 @@ export default function Onboarding() {
     'Other Special Interest'
   ];
 
+  const INDIAN_ID_OPTIONS = ['Aadhar', 'Driving license', 'Student ID'];
+  const NRI_ID_OPTIONS = ['Passport', 'Citizenship', 'VISA'];
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -84,7 +101,80 @@ export default function Onboarding() {
     }
   };
 
-  // Image Upload to Cloudinary Handler
+  // Handler for Indian vs NRI selection
+  const handleApplicantTypeSelect = (type) => {
+    const isIndian = type === 'Indian';
+    setFormData((prev) => ({
+      ...prev,
+      applicantType: type,
+      country: isIndian ? 'India' : (prev.country === 'India' ? '' : prev.country),
+      idProofType: isIndian ? 'Aadhar' : 'Passport',
+      idProofNumber: '',
+      idProofImageUrl: '',
+      idProofSize: 0
+    }));
+    setIdProofPreview('');
+    setErrors((prev) => ({ ...prev, country: '', idProofType: '', idProofNumber: '', idProofImage: '' }));
+  };
+
+  // ID Proof Image Upload to Cloudinary Handler (Strictly <= 2 MB)
+  const handleIdProofImageChange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    // Strict 2 MB limit check as requested
+    const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+    if (file.size > MAX_SIZE_BYTES) {
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      message.error(`File size exceeds 2 MB (Selected file: ${fileSizeMB} MB). ID proof image must be within 2 MB.`);
+      setErrors((prev) => ({
+        ...prev,
+        idProofImage: `File size exceeds 2 MB (${fileSizeMB} MB). Please choose a file under 2 MB.`
+      }));
+      // Reset input value so user can re-select
+      e.target.value = '';
+      return;
+    }
+
+    // Set immediate local preview
+    const localUrl = URL.createObjectURL(file);
+    setIdProofPreview(localUrl);
+    setErrors((prev) => ({ ...prev, idProofImage: '' }));
+    setIsUploadingIdProof(true);
+
+    try {
+      // Upload to Cloudinary under folder 'sams_id_proofs'
+      const cdnUrl = await uploadImageToCloudinary(file);
+      setFormData((prev) => ({
+        ...prev,
+        idProofImageUrl: cdnUrl,
+        idProofSize: file.size
+      }));
+      setErrors((prev) => ({ ...prev, idProofImage: '' }));
+      message.success(`${formData.idProofType || 'ID'} proof uploaded to Cloudinary successfully!`);
+    } catch (err) {
+      message.warning('Cloudinary upload warning. Image preview saved and will be submitted.');
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({
+          ...prev,
+          idProofImageUrl: reader.result,
+          idProofSize: file.size
+        }));
+        setErrors((prev) => ({ ...prev, idProofImage: '' }));
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingIdProof(false);
+    }
+  };
+
+  const removeIdProofImage = () => {
+    setIdProofPreview('');
+    setFormData((prev) => ({ ...prev, idProofImageUrl: '', idProofSize: 0 }));
+  };
+
+  // Payment Proof Image Upload to Cloudinary Handler
   const handleProofImageChange = async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -148,7 +238,23 @@ export default function Onboarding() {
     const errs = {};
     if (!formData.fatherName.trim()) errs.fatherName = "Father's Name is required.";
     if (!formData.motherName.trim()) errs.motherName = "Mother's Name is required.";
-    if (!formData.nationality.trim()) errs.nationality = 'Nationality is required.';
+
+    if (formData.applicantType === 'NRI' && (!formData.country || !formData.country.trim())) {
+      errs.country = 'Please specify which country you reside in.';
+    }
+
+    if (!formData.idProofType) {
+      errs.idProofType = 'Please select one ID document type.';
+    }
+
+    if (!formData.idProofNumber || !formData.idProofNumber.trim()) {
+      errs.idProofNumber = `Please enter your ${formData.idProofType || 'ID'} number or reference.`;
+    }
+
+    if (!formData.idProofImageUrl && !idProofPreview) {
+      errs.idProofImage = `Please upload your ${formData.idProofType || 'ID'} document proof (strictly within 2 MB).`;
+    }
+
     if (!formData.purposeOfJoining.trim()) errs.purposeOfJoining = 'Please state your purpose of joining.';
 
     setErrors(errs);
@@ -192,14 +298,18 @@ export default function Onboarding() {
       return;
     }
 
-    if (isUploadingImage) {
-      message.info('Image is still uploading, please wait a moment...');
+    if (isUploadingImage || isUploadingIdProof) {
+      message.info('Images are still uploading to Cloudinary, please wait a moment...');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const result = await submitOnboardingForm(formData);
+      const payload = {
+        ...formData,
+        nationality: formData.applicantType === 'NRI' ? `NRI - ${formData.country}` : 'Indian'
+      };
+      const result = await submitOnboardingForm(payload);
       setSubmittedData(result);
       message.success('Registration submitted successfully! Welcome to Sam\'s Culinary Art Class.');
       window.scrollTo({ top: 100, behavior: 'smooth' });
@@ -226,13 +336,19 @@ export default function Onboarding() {
       address: '',
       fatherName: '',
       motherName: '',
-      nationality: 'Indian',
+      applicantType: 'Indian',
+      country: 'India',
+      idProofType: 'Aadhar',
+      idProofNumber: '',
+      idProofImageUrl: '',
+      idProofSize: 0,
       purposeOfJoining: '',
       bankDetails: '',
       amountPaid: 500,
       proofImageUrl: ''
     });
     setProofPreview('');
+    setIdProofPreview('');
     setSubmittedData(null);
     setCurrentStep(1);
     setErrors({});
@@ -304,11 +420,32 @@ export default function Onboarding() {
                   <div><strong style={{ opacity: 0.7 }}>Student Name:</strong> <div>{submittedData.name}</div></div>
                   <div><strong style={{ opacity: 0.7 }}>Email:</strong> <div>{submittedData.email}</div></div>
                   <div><strong style={{ opacity: 0.7 }}>Phone / WhatsApp:</strong> <div>{submittedData.phone}</div></div>
-                  <div><strong style={{ opacity: 0.7 }}>Nationality:</strong> <div>{submittedData.nationality}</div></div>
+                  <div><strong style={{ opacity: 0.7 }}>Residency / Country:</strong> <div>{submittedData.applicantType === 'NRI' ? `🌐 NRI (${submittedData.country || 'Overseas'})` : '🇮🇳 Indian Resident'}</div></div>
+                  <div><strong style={{ opacity: 0.7 }}>Verified ID Document:</strong> <div>{submittedData.idProofType || 'Aadhar'}{submittedData.idProofNumber ? ` (${submittedData.idProofNumber})` : ''}</div></div>
                   <div><strong style={{ opacity: 0.7 }}>Registration Fee:</strong> <div style={{ color: '#22c55e', fontWeight: '700' }}>₹{submittedData.amountPaid}/- (Paid / Submitted)</div></div>
                   <div><strong style={{ opacity: 0.7 }}>Purpose:</strong> <div>{submittedData.purposeOfJoining}</div></div>
                   {submittedData.bankDetails && (
                     <div><strong style={{ opacity: 0.7 }}>Transaction ID / Ref:</strong> <div style={{ color: 'var(--mango-yellow)', fontWeight: '600' }}>{submittedData.bankDetails}</div></div>
+                  )}
+                  {submittedData.idProofImageUrl && (
+                    <div style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
+                      <strong style={{ opacity: 0.7, display: 'block', marginBottom: '4px' }}>ID Proof ({submittedData.idProofType}):</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <img
+                          src={submittedData.idProofImageUrl}
+                          alt="ID Document attachment"
+                          style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--mango-yellow)' }}
+                        />
+                        <a
+                          href={submittedData.idProofImageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--mango-yellow)', fontSize: '0.85rem', textDecoration: 'underline' }}
+                        >
+                          View {submittedData.idProofType} Proof on Cloudinary
+                        </a>
+                      </div>
+                    </div>
                   )}
                   {submittedData.proofImageUrl && (
                     <div style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
@@ -601,24 +738,254 @@ export default function Onboarding() {
                         {errors.motherName && <span className="field-error-msg">{errors.motherName}</span>}
                       </div>
 
-                      {/* Nationality */}
-                      <div className="form-group-field">
-                        <label className="field-label" htmlFor="onb-nationality">
-                          Nationality <span style={{ color: '#ff4d4f' }}>*</span>
+                      {/* Residency / Nationality Type Selector: Indian or NRI */}
+                      <div className="form-group-field" style={{ gridColumn: '1 / -1' }}>
+                        <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                          <GlobalOutlined style={{ color: 'var(--mango-yellow)' }} />
+                          <span>Residency Status / Nationality <span style={{ color: '#ff4d4f' }}>*</span></span>
                         </label>
-                        <div className="custom-input-wrap">
-                          <GlobalOutlined className="input-prefix-icon" />
-                          <input
-                            id="onb-nationality"
-                            type="text"
-                            name="nationality"
-                            value={formData.nationality}
-                            onChange={handleInputChange}
-                            placeholder="e.g. Indian"
-                            className={`custom-form-input ${errors.nationality ? 'has-error' : ''}`}
-                          />
+
+                        {/* Interactive Option Cards: Indian vs NRI */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleApplicantTypeSelect('Indian')}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '14px',
+                              padding: '14px 18px',
+                              borderRadius: '12px',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              transition: 'all 0.25s ease',
+                              background: formData.applicantType === 'Indian' ? 'rgba(232, 167, 16, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                              border: '2px solid',
+                              borderColor: formData.applicantType === 'Indian' ? 'var(--mango-yellow)' : 'var(--border-color)',
+                              color: formData.applicantType === 'Indian' ? '#ffd885' : 'inherit',
+                              boxShadow: formData.applicantType === 'Indian' ? '0 4px 14px rgba(232, 167, 16, 0.2)' : 'none'
+                            }}
+                          >
+                            <span style={{ fontSize: '2rem', lineHeight: 1 }}>🇮🇳</span>
+                            <div>
+                              <strong style={{ fontSize: '1rem', display: 'block', color: formData.applicantType === 'Indian' ? 'var(--mango-yellow)' : 'inherit' }}>
+                                Indian Resident
+                              </strong>
+                              <span style={{ fontSize: '0.78rem', opacity: 0.75, display: 'block', marginTop: '2px' }}>
+                                Aadhar / Driving License / Student ID
+                              </span>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleApplicantTypeSelect('NRI')}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '14px',
+                              padding: '14px 18px',
+                              borderRadius: '12px',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              transition: 'all 0.25s ease',
+                              background: formData.applicantType === 'NRI' ? 'rgba(232, 167, 16, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                              border: '2px solid',
+                              borderColor: formData.applicantType === 'NRI' ? 'var(--mango-yellow)' : 'var(--border-color)',
+                              color: formData.applicantType === 'NRI' ? '#ffd885' : 'inherit',
+                              boxShadow: formData.applicantType === 'NRI' ? '0 4px 14px rgba(232, 167, 16, 0.2)' : 'none'
+                            }}
+                          >
+                            <span style={{ fontSize: '2rem', lineHeight: 1 }}>🌐</span>
+                            <div>
+                              <strong style={{ fontSize: '1rem', display: 'block', color: formData.applicantType === 'NRI' ? 'var(--mango-yellow)' : 'inherit' }}>
+                                NRI (Non-Resident)
+                              </strong>
+                              <span style={{ fontSize: '0.78rem', opacity: 0.75, display: 'block', marginTop: '2px' }}>
+                                Passport / Citizenship / VISA
+                              </span>
+                            </div>
+                          </button>
                         </div>
-                        {errors.nationality && <span className="field-error-msg">{errors.nationality}</span>}
+                      </div>
+
+                      {/* If NRI: Ask Which Country? */}
+                      {formData.applicantType === 'NRI' && (
+                        <div className="form-group-field animate-fade-in" style={{ gridColumn: '1 / -1' }}>
+                          <label className="field-label" htmlFor="onb-nri-country">
+                            Which Country do you reside in? <span style={{ color: '#ff4d4f' }}>*</span>
+                          </label>
+                          <div className="custom-input-wrap">
+                            <CompassOutlined className="input-prefix-icon" />
+                            <input
+                              id="onb-nri-country"
+                              type="text"
+                              name="country"
+                              value={formData.country}
+                              onChange={handleInputChange}
+                              placeholder="e.g. United States, UAE, Singapore, Canada, United Kingdom, Australia"
+                              className={`custom-form-input ${errors.country ? 'has-error' : ''}`}
+                            />
+                          </div>
+                          {errors.country && <span className="field-error-msg">{errors.country}</span>}
+                        </div>
+                      )}
+
+                      {/* ID Document Selection (Select any 1 of 3) */}
+                      <div className="form-group-field" style={{ gridColumn: '1 / -1' }}>
+                        <label className="field-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <IdcardOutlined style={{ color: 'var(--mango-yellow)' }} />
+                            <span>Identity Proof Document (Select Any 1 of 3) <span style={{ color: '#ff4d4f' }}>*</span></span>
+                          </span>
+                          <span style={{ fontSize: '0.78rem', opacity: 0.75 }}>
+                            {formData.applicantType === 'NRI' ? 'NRI options: Passport, Citizenship, VISA' : 'Indian options: Aadhar, Driving license, Student ID'}
+                          </span>
+                        </label>
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '6px' }}>
+                          {(formData.applicantType === 'NRI' ? NRI_ID_OPTIONS : INDIAN_ID_OPTIONS).map((docOption) => {
+                            const isSelected = formData.idProofType === docOption;
+                            return (
+                              <button
+                                key={docOption}
+                                type="button"
+                                onClick={() => {
+                                  setFormData((prev) => ({ ...prev, idProofType: docOption }));
+                                  if (errors.idProofType) setErrors((prev) => ({ ...prev, idProofType: '' }));
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  background: isSelected ? 'var(--mango-yellow)' : 'rgba(255, 255, 255, 0.05)',
+                                  color: isSelected ? '#121a14' : 'inherit',
+                                  border: '1px solid',
+                                  borderColor: isSelected ? 'var(--mango-yellow)' : 'var(--border-color)',
+                                  borderRadius: '24px',
+                                  padding: '8px 20px',
+                                  fontSize: '0.9rem',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease',
+                                  boxShadow: isSelected ? '0 2px 10px rgba(232, 167, 16, 0.3)' : 'none'
+                                }}
+                              >
+                                <span>{isSelected ? '✓ ' : ''}{docOption}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {errors.idProofType && <span className="field-error-msg">{errors.idProofType}</span>}
+                      </div>
+
+                      {/* Dynamic ID Document Number Field */}
+                      <div className="form-group-field" style={{ gridColumn: '1 / -1', marginTop: '4px' }}>
+                        <label htmlFor="idProofNumber" className="field-label">
+                          <IdcardOutlined style={{ color: 'var(--mango-yellow)' }} />
+                          <span>{formData.idProofType} Number / Document Reference <span style={{ color: '#ff4d4f' }}>*</span></span>
+                        </label>
+                        <input
+                          type="text"
+                          id="idProofNumber"
+                          name="idProofNumber"
+                          value={formData.idProofNumber || ''}
+                          onChange={handleInputChange}
+                          placeholder={
+                            formData.idProofType === 'Aadhar'
+                              ? 'Enter 12-digit Aadhar number (e.g. 1234 5678 9012)'
+                              : formData.idProofType === 'Driving license'
+                                ? 'Enter Driving License number (e.g. TN-07-20210001234)'
+                                : formData.idProofType === 'Student ID'
+                                  ? 'Enter Student / College ID / Roll number'
+                                  : formData.idProofType === 'Passport'
+                                    ? 'Enter Passport number (e.g. A1234567)'
+                                    : `Enter your official ${formData.idProofType} number`
+                          }
+                          className={`form-input ${errors.idProofNumber ? 'has-error' : ''}`}
+                        />
+                        {errors.idProofNumber && <span className="field-error-msg">{errors.idProofNumber}</span>}
+                      </div>
+
+                      {/* ID Proof Image Upload Box (Strictly <= 2 MB to Cloudinary) */}
+                      <div className="form-group-field" style={{ gridColumn: '1 / -1' }}>
+                        <label className="field-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <CloudUploadOutlined style={{ color: 'var(--mango-yellow)' }} />
+                            <span>Upload {formData.idProofType || 'Identity'} Proof Document <span style={{ color: '#ff4d4f' }}>*</span></span>
+                          </span>
+                          <span className="badge badge-warning" style={{ fontSize: '0.74rem', padding: '3px 9px', letterSpacing: '0.5px' }}>
+                            Max File Size: 2 MB
+                          </span>
+                        </label>
+
+                        {idProofPreview || formData.idProofImageUrl ? (
+                          <div style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', gap: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px', maxWidth: '380px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <img
+                                src={idProofPreview || formData.idProofImageUrl}
+                                alt={`${formData.idProofType} Proof Preview`}
+                                style={{ width: '90px', height: '90px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--mango-yellow)' }}
+                              />
+                              <div>
+                                <span className="badge badge-success" style={{ fontSize: '0.75rem', display: 'inline-block', marginBottom: '6px' }}>
+                                  {isUploadingIdProof ? 'Uploading to Cloudinary...' : 'Uploaded to Cloudinary'}
+                                </span>
+                                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#ffffff' }}>
+                                  {formData.idProofType} Document
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                  {formData.idProofSize ? `${(formData.idProofSize / (1024 * 1024)).toFixed(2)} MB (Within 2 MB limit)` : 'File under 2 MB verified'}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewModal({
+                                  open: true,
+                                  url: idProofPreview || formData.idProofImageUrl,
+                                  title: `${formData.idProofType} Document Preview`
+                                })}
+                                className="btn-outline"
+                                style={{ fontSize: '0.8rem', padding: '4px 12px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                              >
+                                <EyeOutlined /> View Document
+                              </button>
+                              <button
+                                type="button"
+                                onClick={removeIdProofImage}
+                                className="btn-outline"
+                                style={{ fontSize: '0.8rem', padding: '4px 12px', color: '#ff4d4f', borderColor: '#ff4d4f', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <DeleteOutlined /> Remove
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`proof-upload-dropzone ${errors.idProofImage ? 'has-error' : ''}`} style={{ padding: '22px 16px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', border: '2px dashed var(--border-color)', borderRadius: '12px' }}>
+                            <IdcardOutlined style={{ fontSize: '32px', color: errors.idProofImage ? '#ff4d4f' : 'var(--mango-yellow)', opacity: 0.9, marginBottom: '8px' }} />
+                            <div style={{ fontWeight: '600', fontSize: '0.94rem', marginBottom: '4px' }}>
+                              Upload {formData.idProofType} Front / Photo Copy
+                            </div>
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
+                              Official government/student ID for verification. <strong>Must be within 2 MB.</strong>
+                            </p>
+
+                            <label className="btn-outline" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 22px', margin: 0 }}>
+                              <UploadOutlined />
+                              <span>Select {formData.idProofType} (Max 2 MB)</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleIdProofImageChange}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+                          </div>
+                        )}
+                        {errors.idProofImage && <span className="field-error-msg" style={{ display: 'block', marginTop: '6px' }}>{errors.idProofImage}</span>}
                       </div>
 
                       {/* Purpose of Joining */}
@@ -907,15 +1274,18 @@ export default function Onboarding() {
                           </div>
 
                           <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                            <a
-                              href={proofPreview || formData.proofImageUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => setPreviewModal({
+                                open: true,
+                                url: proofPreview || formData.proofImageUrl,
+                                title: 'Payment Proof Screenshot Preview'
+                              })}
                               className="btn-outline"
-                              style={{ fontSize: '0.8rem', padding: '4px 12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              style={{ fontSize: '0.8rem', padding: '4px 12px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
                             >
-                              <EyeOutlined /> View
-                            </a>
+                              <EyeOutlined /> View Screenshot
+                            </button>
                             <button
                               type="button"
                               onClick={removeProofImage}
@@ -1004,6 +1374,42 @@ export default function Onboarding() {
           </div>
         </div>
       </section>
+      {/* In-app Document & Screenshot Preview Lightbox Modal */}
+      <Modal
+        open={previewModal.open}
+        onCancel={() => setPreviewModal({ open: false, url: '', title: '' })}
+        footer={null}
+        centered
+        width={750}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--mango-yellow)' }}>
+            <EyeOutlined />
+            <span>{previewModal.title || 'Document Preview'}</span>
+          </div>
+        }
+      >
+        {previewModal.url && (
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <div style={{ borderRadius: '8px', overflow: 'hidden', background: '#0a0f0b', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '260px', maxHeight: '70vh' }}>
+              <img
+                src={previewModal.url}
+                alt={previewModal.title}
+                style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain' }}
+              />
+            </div>
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setPreviewModal({ open: false, url: '', title: '' })}
+                className="btn-primary btn-mango"
+                style={{ padding: '8px 24px', fontSize: '0.88rem' }}
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -149,9 +149,31 @@ export async function updateApplicationStatus(id, status, adminNotes) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('onboarding_updated'));
     }
-    return json.data;
+    return { data: json.data, emailResult: json.emailResult };
   } catch (err) {
     console.error('Failed to update onboarding status:', err);
+    throw err;
+  }
+}
+
+/**
+ * Manually trigger resending the selection email to applicant
+ */
+export async function resendSelectionEmail(id) {
+  try {
+    const res = await fetch(`${API_BASE}/onboarding`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'resend_email' })
+    });
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    const json = await res.json();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('onboarding_updated'));
+    }
+    return { data: json.data, emailResult: json.emailResult };
+  } catch (err) {
+    console.error('Failed to resend selection email:', err);
     throw err;
   }
 }
@@ -189,12 +211,17 @@ export function exportOnboardingToCSV(applications = []) {
     'Address',
     'Father Name',
     'Mother Name',
-    'Nationality',
+    'Nationality Type',
+    'Country',
+    'ID Proof Type',
+    'ID Proof Number',
+    'ID Proof URL',
     'Purpose of Joining',
     'Fee (INR)',
     'Bank / UPI Reference',
     'Payment Proof Image URL',
     'Status',
+    'Email Notification',
     'Admin Notes',
     'Submitted Date'
   ];
@@ -207,12 +234,17 @@ export function exportOnboardingToCSV(applications = []) {
     `"${(app.address || '').replace(/"/g, '""')}"`,
     `"${(app.fatherName || '').replace(/"/g, '""')}"`,
     `"${(app.motherName || '').replace(/"/g, '""')}"`,
-    `"${(app.nationality || '').replace(/"/g, '""')}"`,
+    `"${(app.applicantType || 'Indian').replace(/"/g, '""')}"`,
+    `"${(app.country || 'India').replace(/"/g, '""')}"`,
+    `"${(app.idProofType || '').replace(/"/g, '""')}"`,
+    `"${(app.idProofNumber || '').replace(/"/g, '""')}"`,
+    `"${(app.idProofImageUrl || '').replace(/"/g, '""')}"`,
     `"${(app.purposeOfJoining || '').replace(/"/g, '""')}"`,
     `"${app.amountPaid || 500}"`,
     `"${(app.bankDetails || '').replace(/"/g, '""')}"`,
     `"${(app.proofImageUrl || '').replace(/"/g, '""')}"`,
     `"${app.status || 'Pending'}"`,
+    `"${app.emailNotificationSent ? (app.emailStatus || 'Sent') : 'Not Sent'}"`,
     `"${(app.adminNotes || '').replace(/"/g, '""')}"`,
     `"${app.submittedAt ? new Date(app.submittedAt).toLocaleString() : ''}"`
   ]);
