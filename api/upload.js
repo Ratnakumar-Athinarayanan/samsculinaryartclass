@@ -1,3 +1,4 @@
+// Cloudinary image upload and media management handler
 import dotenv from 'dotenv';
 import { v2 as cloudinary } from 'cloudinary';
 import { deleteFromCloudinary } from './_cloudinary.js';
