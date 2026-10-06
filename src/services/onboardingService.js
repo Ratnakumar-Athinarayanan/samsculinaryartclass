@@ -6,7 +6,7 @@ const GOOGLE_FORM_RESPONSE_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSdsgY
 /**
  * Upload image to Cloudinary via backend /api/upload
  */
-export async function uploadImageToCloudinary(imageFileOrBase64) {
+export async function uploadImageToCloudinary(imageFileOrBase64, previousUrl = null) {
   try {
     let base64Data = imageFileOrBase64;
 
@@ -20,10 +20,18 @@ export async function uploadImageToCloudinary(imageFileOrBase64) {
       });
     }
 
+    const payload = {
+      image: base64Data,
+      folder: 'sams_onboarding_proofs'
+    };
+    if (previousUrl && typeof previousUrl === 'string' && previousUrl.includes('cloudinary.com')) {
+      payload.previousUrl = previousUrl;
+    }
+
     const res = await fetch(`${API_BASE}/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: base64Data, folder: 'sams_onboarding_proofs' })
+      body: JSON.stringify(payload)
     });
 
     if (!res.ok) {
@@ -36,6 +44,22 @@ export async function uploadImageToCloudinary(imageFileOrBase64) {
   } catch (err) {
     console.error('Image upload failed:', err);
     throw err;
+  }
+}
+
+/**
+ * Remove an uploaded file from Cloudinary to avoid duplicate or orphaned storage
+ */
+export async function deleteCloudinaryImage(urlOrPublicId) {
+  if (!urlOrPublicId || typeof urlOrPublicId !== 'string' || !urlOrPublicId.includes('cloudinary.com')) return;
+  try {
+    await fetch(`${API_BASE}/upload`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: urlOrPublicId })
+    });
+  } catch (err) {
+    console.warn('Failed to delete image from Cloudinary:', err);
   }
 }
 

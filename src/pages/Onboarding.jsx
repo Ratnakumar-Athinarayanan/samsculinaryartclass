@@ -35,8 +35,7 @@ import {
   CompassOutlined
 } from '@ant-design/icons';
 import useSEO from '../hooks/useSEO';
-import TiltCard from '../components/TiltCard';
-import { submitOnboardingForm, uploadImageToCloudinary } from '../services/onboardingService';
+import { submitOnboardingForm, uploadImageToCloudinary, deleteCloudinaryImage } from '../services/onboardingService';
 
 export default function Onboarding() {
   useSEO({
@@ -104,6 +103,9 @@ export default function Onboarding() {
   // Handler for Indian vs NRI selection
   const handleApplicantTypeSelect = (type) => {
     const isIndian = type === 'Indian';
+    if (formData.idProofImageUrl) {
+      deleteCloudinaryImage(formData.idProofImageUrl);
+    }
     setFormData((prev) => ({
       ...prev,
       applicantType: type,
@@ -142,9 +144,10 @@ export default function Onboarding() {
     setErrors((prev) => ({ ...prev, idProofImage: '' }));
     setIsUploadingIdProof(true);
 
+    const prevUrl = formData.idProofImageUrl;
     try {
-      // Upload to Cloudinary under folder 'sams_id_proofs'
-      const cdnUrl = await uploadImageToCloudinary(file);
+      // Upload to Cloudinary and clean up any previously uploaded ID proof to prevent duplicates
+      const cdnUrl = await uploadImageToCloudinary(file, prevUrl);
       setFormData((prev) => ({
         ...prev,
         idProofImageUrl: cdnUrl,
@@ -166,10 +169,14 @@ export default function Onboarding() {
       reader.readAsDataURL(file);
     } finally {
       setIsUploadingIdProof(false);
+      if (e.target) e.target.value = '';
     }
   };
 
   const removeIdProofImage = () => {
+    if (formData.idProofImageUrl) {
+      deleteCloudinaryImage(formData.idProofImageUrl);
+    }
     setIdProofPreview('');
     setFormData((prev) => ({ ...prev, idProofImageUrl: '', idProofSize: 0 }));
   };
@@ -190,9 +197,10 @@ export default function Onboarding() {
     setErrors((prev) => ({ ...prev, proofImage: '' }));
     setIsUploadingImage(true);
 
+    const prevUrl = formData.proofImageUrl;
     try {
-      // Upload directly via backend service
-      const cdnUrl = await uploadImageToCloudinary(file);
+      // Upload directly via backend service and clean up previous screenshot to prevent duplicates
+      const cdnUrl = await uploadImageToCloudinary(file, prevUrl);
       setFormData((prev) => ({ ...prev, proofImageUrl: cdnUrl }));
       setErrors((prev) => ({ ...prev, proofImage: '' }));
       message.success('Payment screenshot uploaded successfully!');
@@ -207,10 +215,14 @@ export default function Onboarding() {
       reader.readAsDataURL(file);
     } finally {
       setIsUploadingImage(false);
+      if (e.target) e.target.value = '';
     }
   };
 
   const removeProofImage = () => {
+    if (formData.proofImageUrl) {
+      deleteCloudinaryImage(formData.proofImageUrl);
+    }
     setProofPreview('');
     setFormData((prev) => ({ ...prev, proofImageUrl: '' }));
   };

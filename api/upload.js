@@ -38,11 +38,13 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const { image, folder = 'sams_culinary_onboarding' } = body;
+    const { image, folder = 'sams_culinary_onboarding', replaceUrl, previousUrl } = body;
 
     if (!image) {
       return res.status(400).json({ success: false, error: 'Image data is required for upload' });
     }
+
+    const oldUrlToClean = replaceUrl || previousUrl;
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'bvu4umtv';
     const apiKey = process.env.CLOUDINARY_API_KEY || '659229348823642';
@@ -55,6 +57,15 @@ export default async function handler(req, res) {
       api_secret: apiSecret,
       secure: true
     });
+
+    // If replacing an existing image, delete old file to prevent duplicates
+    if (oldUrlToClean) {
+      try {
+        await deleteFromCloudinary(oldUrlToClean);
+      } catch (cleanErr) {
+        console.warn('Failed to delete previous image during replacement:', cleanErr);
+      }
+    }
 
     // Upload directly using authenticated Cloudinary uploader
     const uploadResult = await cloudinary.uploader.upload(image, {

@@ -1278,13 +1278,13 @@ export default function AdminWebinars() {
                                       title={`Click to view ${app.idProofType || 'ID'} Proof`}
                                     >
                                       <img
-                                        src={app.idProofImageUrl}
+                                        src={app.idProofImageUrl.toLowerCase().endsWith('.pdf') && app.idProofImageUrl.includes('cloudinary.com') ? app.idProofImageUrl.replace(/\.pdf$/i, '.jpg') : app.idProofImageUrl}
                                         alt="ID Proof thumb"
                                         style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '6px', border: isDarkMode ? '1.5px solid #22c55e' : '1.5px solid #16a34a', cursor: 'pointer' }}
                                       />
                                     </button>
                                     <span style={{ fontSize: '0.74rem', color: isDarkMode ? '#4ade80' : '#15803d', fontWeight: '700' }}>
-                                      🪪 {app.idProofType || 'ID Proof'}
+                                      🪪 {app.idProofType || 'ID Proof'}{app.idProofImageUrl.toLowerCase().endsWith('.pdf') ? ' (PDF)' : ''}
                                     </span>
                                     {app.idProofNumber && (
                                       <span style={{ fontSize: '0.7rem', color: isDarkMode ? 'var(--mango-yellow)' : '#b45309', fontFamily: 'monospace' }}>
@@ -1583,7 +1583,7 @@ export default function AdminWebinars() {
                       <div>
                         <div style={{ borderRadius: '8px', overflow: 'hidden', border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', marginBottom: '10px', height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0b100c' }}>
                           <Image
-                            src={selectedApplicant.idProofImageUrl}
+                            src={selectedApplicant.idProofImageUrl.toLowerCase().endsWith('.pdf') && selectedApplicant.idProofImageUrl.includes('cloudinary.com') ? selectedApplicant.idProofImageUrl.replace(/\.pdf$/i, '.jpg') : selectedApplicant.idProofImageUrl}
                             alt={`${selectedApplicant.idProofType} Document`}
                             style={{ maxWidth: '100%', maxHeight: '180px', objectFit: 'contain' }}
                             preview={{
@@ -1745,11 +1745,19 @@ export default function AdminWebinars() {
           {docPreviewModal.url && (
             <div style={{ textAlign: 'center', padding: '12px 0' }}>
               <div style={{ borderRadius: '10px', overflow: 'hidden', background: isDarkMode ? '#0a0f0b' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '260px', maxHeight: '70vh' }}>
-                <img
-                  src={docPreviewModal.url}
-                  alt={docPreviewModal.title}
-                  style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain' }}
-                />
+                {docPreviewModal.url.toLowerCase().endsWith('.pdf') ? (
+                  <iframe
+                    src={docPreviewModal.url}
+                    title={docPreviewModal.title}
+                    style={{ width: '100%', height: '65vh', border: 'none', background: '#ffffff' }}
+                  />
+                ) : (
+                  <img
+                    src={docPreviewModal.url}
+                    alt={docPreviewModal.title}
+                    style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain' }}
+                  />
+                )}
               </div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '16px' }}>
                 <a

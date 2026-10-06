@@ -60,6 +60,10 @@ export default async function handler(req, res) {
       const randomSuffix = Math.floor(100000 + Math.random() * 900000);
       const appNumber = `SAMS-ONB-${randomSuffix}`;
 
+      const finalIdProofImageUrl = (idProofImageUrl || body.idProofUrl || body.idProofImage || '').trim();
+      const finalProofImageUrl = (proofImageUrl || body.proofUrl || '').trim();
+      const finalIdProofBytes = Number(idProofBytes || body.idProofSize || 0);
+
       const newApplication = {
         id: `onboard-${timestamp}`,
         applicationNumber: appNumber,
@@ -74,12 +78,12 @@ export default async function handler(req, res) {
         country: applicantType === 'NRI' ? country : 'India',
         idProofType: idProofType || (applicantType === 'NRI' ? 'Passport' : 'Aadhar'),
         idProofNumber: idProofNumber ? idProofNumber.trim() : '',
-        idProofImageUrl: idProofImageUrl || '',
-        idProofBytes: idProofBytes || 0,
+        idProofImageUrl: finalIdProofImageUrl,
+        idProofBytes: finalIdProofBytes,
         purposeOfJoining: purposeOfJoining.trim(),
         bankDetails: bankDetails.trim(),
         amountPaid: Number(amountPaid) || 500,
-        proofImageUrl: proofImageUrl || '',
+        proofImageUrl: finalProofImageUrl,
         currency: 'INR',
         status: 'Pending Verification', // 'Pending Verification' | 'Verified / Enrolled' | 'Follow-up'
         adminNotes: '',
@@ -102,7 +106,7 @@ export default async function handler(req, res) {
     // PUT /api/onboarding - Update application status/admin notes & send selection email
     if (req.method === 'PUT') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      const { id, status, adminNotes, action, sendEmail } = body;
+      const { id, status, adminNotes, action, sendEmail, idProofImageUrl, idProofType, idProofNumber, applicantType, country, proofImageUrl } = body;
 
       if (!id) {
         return res.status(400).json({ success: false, error: 'Application ID is required' });
@@ -118,6 +122,12 @@ export default async function handler(req, res) {
 
       if (status !== undefined) onboardingList[index].status = status;
       if (adminNotes !== undefined) onboardingList[index].adminNotes = adminNotes;
+      if (idProofImageUrl !== undefined) onboardingList[index].idProofImageUrl = idProofImageUrl;
+      if (idProofType !== undefined) onboardingList[index].idProofType = idProofType;
+      if (idProofNumber !== undefined) onboardingList[index].idProofNumber = idProofNumber;
+      if (applicantType !== undefined) onboardingList[index].applicantType = applicantType;
+      if (country !== undefined) onboardingList[index].country = country;
+      if (proofImageUrl !== undefined) onboardingList[index].proofImageUrl = proofImageUrl;
       onboardingList[index].updatedAt = new Date().toISOString();
 
       let emailResult = null;
