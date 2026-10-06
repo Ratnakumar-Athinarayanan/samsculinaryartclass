@@ -103,10 +103,10 @@ export default async function handler(req, res) {
       });
     }
 
-    // PUT /api/onboarding - Update application status/admin notes & send selection email
+    // PUT /api/onboarding - Update application details, status/admin notes & send selection email
     if (req.method === 'PUT') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      const { id, status, adminNotes, action, sendEmail, idProofImageUrl, idProofType, idProofNumber, applicantType, country, proofImageUrl } = body;
+      const { id, status, adminNotes, action, sendEmail } = body;
 
       if (!id) {
         return res.status(400).json({ success: false, error: 'Application ID is required' });
@@ -122,12 +122,21 @@ export default async function handler(req, res) {
 
       if (status !== undefined) onboardingList[index].status = status;
       if (adminNotes !== undefined) onboardingList[index].adminNotes = adminNotes;
-      if (idProofImageUrl !== undefined) onboardingList[index].idProofImageUrl = idProofImageUrl;
-      if (idProofType !== undefined) onboardingList[index].idProofType = idProofType;
-      if (idProofNumber !== undefined) onboardingList[index].idProofNumber = idProofNumber;
-      if (applicantType !== undefined) onboardingList[index].applicantType = applicantType;
-      if (country !== undefined) onboardingList[index].country = country;
-      if (proofImageUrl !== undefined) onboardingList[index].proofImageUrl = proofImageUrl;
+      if (body.name !== undefined) onboardingList[index].name = body.name.trim();
+      if (body.email !== undefined) onboardingList[index].email = body.email.trim().toLowerCase();
+      if (body.phone !== undefined) onboardingList[index].phone = body.phone.trim();
+      if (body.address !== undefined) onboardingList[index].address = body.address.trim();
+      if (body.fatherName !== undefined) onboardingList[index].fatherName = body.fatherName.trim();
+      if (body.motherName !== undefined) onboardingList[index].motherName = body.motherName.trim();
+      if (body.purposeOfJoining !== undefined) onboardingList[index].purposeOfJoining = body.purposeOfJoining.trim();
+      if (body.bankDetails !== undefined) onboardingList[index].bankDetails = body.bankDetails.trim();
+      if (body.amountPaid !== undefined) onboardingList[index].amountPaid = Number(body.amountPaid) || 500;
+      if (body.idProofImageUrl !== undefined) onboardingList[index].idProofImageUrl = body.idProofImageUrl;
+      if (body.idProofType !== undefined) onboardingList[index].idProofType = body.idProofType;
+      if (body.idProofNumber !== undefined) onboardingList[index].idProofNumber = body.idProofNumber;
+      if (body.applicantType !== undefined) onboardingList[index].applicantType = body.applicantType;
+      if (body.country !== undefined) onboardingList[index].country = body.country;
+      if (body.proofImageUrl !== undefined) onboardingList[index].proofImageUrl = body.proofImageUrl;
       onboardingList[index].updatedAt = new Date().toISOString();
 
       let emailResult = null;

@@ -48,12 +48,14 @@ export default function Onboarding() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
 
-  // Cloudinary image upload states
+  // Cloudinary image upload states & deferred file upload
   const [proofPreview, setProofPreview] = useState('');
+  const [proofImageFile, setProofImageFile] = useState(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
-  // ID Proof Upload State (Max 2 MB)
+  // ID Proof Upload State (Max 2 MB) & deferred file upload
   const [idProofPreview, setIdProofPreview] = useState('');
+  const [idProofFile, setIdProofFile] = useState(null);
   const [isUploadingIdProof, setIsUploadingIdProof] = useState(false);
 
   // In-app Document Lightbox Preview Modal State (Prevents blank screens)
@@ -103,9 +105,8 @@ export default function Onboarding() {
   // Handler for Indian vs NRI selection
   const handleApplicantTypeSelect = (type) => {
     const isIndian = type === 'Indian';
-    if (formData.idProofImageUrl) {
-      deleteCloudinaryImage(formData.idProofImageUrl);
-    }
+    setIdProofFile(null);
+    setIdProofPreview('');
     setFormData((prev) => ({
       ...prev,
       applicantType: type,
@@ -115,12 +116,11 @@ export default function Onboarding() {
       idProofImageUrl: '',
       idProofSize: 0
     }));
-    setIdProofPreview('');
     setErrors((prev) => ({ ...prev, country: '', idProofType: '', idProofNumber: '', idProofImage: '' }));
   };
 
-  // ID Proof Image Upload to Cloudinary Handler (Strictly <= 2 MB)
-  const handleIdProofImageChange = async (e) => {
+  // ID Proof Selection Handler (Stored locally, uploaded strictly upon final submit)
+  const handleIdProofImageChange = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
@@ -133,56 +133,30 @@ export default function Onboarding() {
         ...prev,
         idProofImage: `File size exceeds 2 MB (${fileSizeMB} MB). Please choose a file under 2 MB.`
       }));
-      // Reset input value so user can re-select
       e.target.value = '';
       return;
     }
 
-    // Set immediate local preview
+    // Set immediate local preview and save file in memory (only uploaded to Cloudinary on final submit)
     const localUrl = URL.createObjectURL(file);
+    setIdProofFile(file);
     setIdProofPreview(localUrl);
+    setFormData((prev) => ({
+      ...prev,
+      idProofSize: file.size
+    }));
     setErrors((prev) => ({ ...prev, idProofImage: '' }));
-    setIsUploadingIdProof(true);
-
-    const prevUrl = formData.idProofImageUrl;
-    try {
-      // Upload to Cloudinary and clean up any previously uploaded ID proof to prevent duplicates
-      const cdnUrl = await uploadImageToCloudinary(file, prevUrl);
-      setFormData((prev) => ({
-        ...prev,
-        idProofImageUrl: cdnUrl,
-        idProofSize: file.size
-      }));
-      setErrors((prev) => ({ ...prev, idProofImage: '' }));
-      message.success(`${formData.idProofType || 'ID'} proof uploaded to Cloudinary successfully!`);
-    } catch (err) {
-      message.warning('Cloudinary upload warning. Image preview saved and will be submitted.');
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({
-          ...prev,
-          idProofImageUrl: reader.result,
-          idProofSize: file.size
-        }));
-        setErrors((prev) => ({ ...prev, idProofImage: '' }));
-      };
-      reader.readAsDataURL(file);
-    } finally {
-      setIsUploadingIdProof(false);
-      if (e.target) e.target.value = '';
-    }
+    e.target.value = '';
   };
 
   const removeIdProofImage = () => {
-    if (formData.idProofImageUrl) {
-      deleteCloudinaryImage(formData.idProofImageUrl);
-    }
+    setIdProofFile(null);
     setIdProofPreview('');
     setFormData((prev) => ({ ...prev, idProofImageUrl: '', idProofSize: 0 }));
   };
 
-  // Payment Proof Image Upload to Cloudinary Handler
-  const handleProofImageChange = async (e) => {
+  // Payment Proof Image Selection Handler (Stored locally, uploaded strictly upon final submit)
+  const handleProofImageChange = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
@@ -191,38 +165,16 @@ export default function Onboarding() {
       return;
     }
 
-    // Set local immediate preview
+    // Set local immediate preview and save file in memory (only uploaded to Cloudinary on final submit)
     const localUrl = URL.createObjectURL(file);
+    setProofImageFile(file);
     setProofPreview(localUrl);
     setErrors((prev) => ({ ...prev, proofImage: '' }));
-    setIsUploadingImage(true);
-
-    const prevUrl = formData.proofImageUrl;
-    try {
-      // Upload directly via backend service and clean up previous screenshot to prevent duplicates
-      const cdnUrl = await uploadImageToCloudinary(file, prevUrl);
-      setFormData((prev) => ({ ...prev, proofImageUrl: cdnUrl }));
-      setErrors((prev) => ({ ...prev, proofImage: '' }));
-      message.success('Payment screenshot uploaded successfully!');
-    } catch (err) {
-      message.warning('Image upload warning. The image preview is saved and will be submitted.');
-      // Fallback: convert to base64
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, proofImageUrl: reader.result }));
-        setErrors((prev) => ({ ...prev, proofImage: '' }));
-      };
-      reader.readAsDataURL(file);
-    } finally {
-      setIsUploadingImage(false);
-      if (e.target) e.target.value = '';
-    }
+    e.target.value = '';
   };
 
   const removeProofImage = () => {
-    if (formData.proofImageUrl) {
-      deleteCloudinaryImage(formData.proofImageUrl);
-    }
+    setProofImageFile(null);
     setProofPreview('');
     setFormData((prev) => ({ ...prev, proofImageUrl: '' }));
   };
@@ -310,26 +262,45 @@ export default function Onboarding() {
       return;
     }
 
-    if (isUploadingImage || isUploadingIdProof) {
-      message.info('Images are still uploading to Cloudinary, please wait a moment...');
-      return;
-    }
-
     setIsSubmitting(true);
+    const hideLoading = message.loading('Uploading documents & saving enrollment...', 0);
+
     try {
+      let finalIdUrl = formData.idProofImageUrl;
+      let finalProofUrl = formData.proofImageUrl;
+
+      // 1. Upload ID proof to Cloudinary ONLY upon final submit
+      if (idProofFile) {
+        setIsUploadingIdProof(true);
+        finalIdUrl = await uploadImageToCloudinary(idProofFile);
+      }
+
+      // 2. Upload payment proof to Cloudinary ONLY upon final submit
+      if (proofImageFile) {
+        setIsUploadingImage(true);
+        finalProofUrl = await uploadImageToCloudinary(proofImageFile);
+      }
+
       const payload = {
         ...formData,
+        idProofImageUrl: finalIdUrl,
+        proofImageUrl: finalProofUrl,
         nationality: formData.applicantType === 'NRI' ? `NRI - ${formData.country}` : 'Indian'
       };
+
       const result = await submitOnboardingForm(payload);
       setSubmittedData(result);
+      hideLoading();
       message.success('Registration submitted successfully! Welcome to Sam\'s Culinary Art Class.');
       window.scrollTo({ top: 100, behavior: 'smooth' });
     } catch (err) {
+      hideLoading();
       console.error(err);
       message.error(err.message || 'Failed to submit onboarding registration. Please try again.');
     } finally {
       setIsSubmitting(false);
+      setIsUploadingIdProof(false);
+      setIsUploadingImage(false);
     }
   };
 
@@ -361,6 +332,8 @@ export default function Onboarding() {
     });
     setProofPreview('');
     setIdProofPreview('');
+    setIdProofFile(null);
+    setProofImageFile(null);
     setSubmittedData(null);
     setCurrentStep(1);
     setErrors({});
@@ -941,7 +914,7 @@ export default function Onboarding() {
                               />
                               <div>
                                 <span className="badge badge-success" style={{ fontSize: '0.75rem', display: 'inline-block', marginBottom: '6px' }}>
-                                  {isUploadingIdProof ? 'Uploading to Cloudinary...' : 'Uploaded to Cloudinary'}
+                                  {isUploadingIdProof ? 'Uploading to Cloudinary...' : idProofFile ? 'Document Attached (Ready)' : 'Uploaded to Cloudinary'}
                                 </span>
                                 <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#ffffff' }}>
                                   {formData.idProofType} Document

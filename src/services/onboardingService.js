@@ -181,6 +181,28 @@ export async function updateApplicationStatus(id, status, adminNotes) {
 }
 
 /**
+ * Update full application details (Name, Contact, ID proof, Payment, Status, Notes)
+ */
+export async function updateApplication(id, fields = {}) {
+  try {
+    const res = await fetch(`${API_BASE}/onboarding`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...fields })
+    });
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    const json = await res.json();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('onboarding_updated'));
+    }
+    return { data: json.data, emailResult: json.emailResult };
+  } catch (err) {
+    console.error('Failed to update onboarding application:', err);
+    throw err;
+  }
+}
+
+/**
  * Manually trigger resending the selection email to applicant
  */
 export async function resendSelectionEmail(id) {

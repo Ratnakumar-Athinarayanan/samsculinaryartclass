@@ -58,6 +58,7 @@ import {
 import {
   getOnboardingApplications,
   updateApplicationStatus,
+  updateApplication,
   deleteApplication,
   exportOnboardingToCSV,
   resendSelectionEmail
@@ -88,6 +89,11 @@ export default function AdminWebinars() {
   const [isDeletingOnboardingId, setIsDeletingOnboardingId] = useState(null);
   const [isLoadingOnboarding, setIsLoadingOnboarding] = useState(false);
   const [docPreviewModal, setDocPreviewModal] = useState({ open: false, url: '', title: '' });
+
+  // Edit Student Application State
+  const [editingApplicant, setEditingApplicant] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Responsive Theme Detection (Light vs Dark Mode)
   const [isDarkMode, setIsDarkMode] = useState(() =>
@@ -485,6 +491,68 @@ export default function AdminWebinars() {
       } finally {
         setIsDeletingOnboardingId(null);
       }
+    }
+  };
+
+  // Handle Edit Onboarding Student
+  const handleOpenEditModal = (app) => {
+    setEditingApplicant(app);
+    setEditFormData({
+      id: app.id,
+      name: app.name || '',
+      email: app.email || '',
+      phone: app.phone || '',
+      address: app.address || '',
+      fatherName: app.fatherName || '',
+      motherName: app.motherName || '',
+      applicantType: app.applicantType || 'Indian',
+      country: app.country || 'India',
+      idProofType: app.idProofType || 'Aadhar',
+      idProofNumber: app.idProofNumber || '',
+      idProofImageUrl: app.idProofImageUrl || '',
+      purposeOfJoining: app.purposeOfJoining || '',
+      bankDetails: app.bankDetails || '',
+      amountPaid: app.amountPaid !== undefined ? app.amountPaid : 500,
+      proofImageUrl: app.proofImageUrl || '',
+      status: app.status || 'Pending Verification',
+      adminNotes: app.adminNotes || ''
+    });
+  };
+
+  const handleEditFieldChange = (field, value) => {
+    setEditFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editFormData.name?.trim()) {
+      message.error('Student Name is required.');
+      return;
+    }
+    if (!editFormData.email?.trim()) {
+      message.error('Email is required.');
+      return;
+    }
+    if (!editFormData.phone?.trim()) {
+      message.error('Phone number is required.');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      await updateApplication(editFormData.id, editFormData);
+      message.success(`Application for ${editFormData.name} updated successfully!`);
+      setOnboardingList((prev) =>
+        prev.map((item) => (item.id === editFormData.id ? { ...item, ...editFormData } : item))
+      );
+      if (selectedApplicant && selectedApplicant.id === editFormData.id) {
+        setSelectedApplicant((prev) => ({ ...prev, ...editFormData }));
+      }
+      setEditingApplicant(null);
+    } catch (err) {
+      console.error('Failed to save applicant:', err);
+      message.error(err.message || 'Failed to update application.');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -1286,11 +1354,6 @@ export default function AdminWebinars() {
                                     <span style={{ fontSize: '0.74rem', color: isDarkMode ? '#4ade80' : '#15803d', fontWeight: '700' }}>
                                       🪪 {app.idProofType || 'ID Proof'}{app.idProofImageUrl.toLowerCase().endsWith('.pdf') ? ' (PDF)' : ''}
                                     </span>
-                                    {app.idProofNumber && (
-                                      <span style={{ fontSize: '0.7rem', color: isDarkMode ? 'var(--mango-yellow)' : '#b45309', fontFamily: 'monospace' }}>
-                                        No: {app.idProofNumber}
-                                      </span>
-                                    )}
                                   </div>
                                 ) : (
                                   <div style={{ fontSize: '0.72rem', color: isDarkMode ? 'var(--text-muted)' : '#64748b' }}>
@@ -1366,6 +1429,14 @@ export default function AdminWebinars() {
                               <div className="table-actions-cell">
                                 <button onClick={() => setSelectedApplicant(app)} className="action-btn" title="View Full Application Details">
                                   <EyeOutlined />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenEditModal(app)}
+                                  className="action-btn"
+                                  title="Edit Application"
+                                  style={{ color: 'var(--mango-yellow)' }}
+                                >
+                                  <EditOutlined />
                                 </button>
                                 {app.status === 'Verified / Enrolled' && (
                                   <button
@@ -1695,6 +1766,18 @@ export default function AdminWebinars() {
                       <SendOutlined /> Resend Email
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = selectedApplicant;
+                      setSelectedApplicant(null);
+                      handleOpenEditModal(cur);
+                    }}
+                    className="btn-outline"
+                    style={{ padding: '8px 16px', fontSize: '0.85rem', color: 'var(--mango-yellow)', borderColor: 'var(--mango-yellow)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <EditOutlined /> Edit Details
+                  </button>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -1711,6 +1794,308 @@ export default function AdminWebinars() {
                 </div>
               </div>
             </div>
+          )}
+        </Modal>
+      </ConfigProvider>
+
+      {/* EDIT STUDENT APPLICATION MODAL */}
+      <ConfigProvider
+        theme={{
+          algorithm: isDarkMode ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+          token: {
+            colorPrimary: '#e8a710',
+            colorBgElevated: isDarkMode ? '#141c16' : '#ffffff',
+            colorBorderSecondary: isDarkMode ? 'rgba(232, 167, 16, 0.3)' : 'rgba(25, 65, 33, 0.15)',
+            colorText: isDarkMode ? '#ffffff' : '#1a241c',
+            borderRadiusLG: 16
+          }
+        }}
+      >
+        <Modal
+          open={Boolean(editingApplicant)}
+          onCancel={() => setEditingApplicant(null)}
+          footer={null}
+          centered
+          width={850}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: isDarkMode ? 'var(--mango-yellow)' : '#194121' }}>
+              <EditOutlined />
+              <span>Edit Student Application — {editFormData.name || 'Student Details'}</span>
+            </div>
+          }
+        >
+          {editingApplicant && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveEdit();
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxHeight: '75vh', overflowY: 'auto', paddingRight: '6px', paddingTop: '8px' }}
+            >
+              {/* Section 1: Basic Information */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--mango-yellow)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
+                  👤 Student Profile
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                  <div className="form-group">
+                    <label>Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormData.name || ''}
+                      onChange={(e) => handleEditFieldChange('name', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. John Doe"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      value={editFormData.email || ''}
+                      onChange={(e) => handleEditFieldChange('email', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. student@gmail.com"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Phone / WhatsApp *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormData.phone || ''}
+                      onChange={(e) => handleEditFieldChange('phone', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. +91 9876543210"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Applicant Type</label>
+                    <select
+                      value={editFormData.applicantType || 'Indian'}
+                      onChange={(e) => handleEditFieldChange('applicantType', e.target.value)}
+                      className="form-input"
+                      style={{ background: isDarkMode ? '#0d130e' : '#fff' }}
+                    >
+                      <option value="Indian">Indian Resident</option>
+                      <option value="NRI">NRI (Non-Resident Indian)</option>
+                      <option value="Foreign National">Foreign National</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Country / Nationality</label>
+                    <input
+                      type="text"
+                      value={editFormData.country || ''}
+                      onChange={(e) => handleEditFieldChange('country', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. India, UAE, USA"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Application Status</label>
+                    <select
+                      value={editFormData.status || 'Pending Verification'}
+                      onChange={(e) => handleEditFieldChange('status', e.target.value)}
+                      className="form-input"
+                      style={{ background: isDarkMode ? '#0d130e' : '#fff' }}
+                    >
+                      <option value="Pending Verification">Pending Verification</option>
+                      <option value="Verified / Enrolled">Verified / Enrolled</option>
+                      <option value="Follow-up">Follow-up</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Family & Residence */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--mango-yellow)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
+                  🏡 Family &amp; Residential Address
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                  <div className="form-group">
+                    <label>Father's Name</label>
+                    <input
+                      type="text"
+                      value={editFormData.fatherName || ''}
+                      onChange={(e) => handleEditFieldChange('fatherName', e.target.value)}
+                      className="form-input"
+                      placeholder="Father's full name"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Mother's Name</label>
+                    <input
+                      type="text"
+                      value={editFormData.motherName || ''}
+                      onChange={(e) => handleEditFieldChange('motherName', e.target.value)}
+                      className="form-input"
+                      placeholder="Mother's full name"
+                    />
+                  </div>
+                </div>
+                <div className="form-group" style={{ marginTop: '14px' }}>
+                  <label>Full Residential Address</label>
+                  <textarea
+                    rows={2}
+                    value={editFormData.address || ''}
+                    onChange={(e) => handleEditFieldChange('address', e.target.value)}
+                    className="form-input"
+                    placeholder="Door no, street, city, pin code, state"
+                  />
+                </div>
+              </div>
+
+              {/* Section 3: Identity Document */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--mango-yellow)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
+                  🪪 Identity Verification
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                  <div className="form-group">
+                    <label>ID Proof Type</label>
+                    <select
+                      value={editFormData.idProofType || 'Aadhar'}
+                      onChange={(e) => handleEditFieldChange('idProofType', e.target.value)}
+                      className="form-input"
+                      style={{ background: isDarkMode ? '#0d130e' : '#fff' }}
+                    >
+                      <option value="Aadhar">Aadhar Card</option>
+                      <option value="Passport">Passport</option>
+                      <option value="Driving License">Driving License</option>
+                      <option value="Voter ID">Voter ID</option>
+                      <option value="PAN Card">PAN Card</option>
+                      <option value="National ID">National ID</option>
+                      <option value="Other">Other Government ID</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>ID Proof Number / Document ID</label>
+                    <input
+                      type="text"
+                      value={editFormData.idProofNumber || ''}
+                      onChange={(e) => handleEditFieldChange('idProofNumber', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. 1234 5678 9012"
+                    />
+                  </div>
+                </div>
+                <div className="form-group" style={{ marginTop: '14px' }}>
+                  <label>ID Proof Document / Image URL</label>
+                  <input
+                    type="url"
+                    value={editFormData.idProofImageUrl || ''}
+                    onChange={(e) => handleEditFieldChange('idProofImageUrl', e.target.value)}
+                    className="form-input"
+                    placeholder="https://res.cloudinary.com/..."
+                  />
+                  {editFormData.idProofImageUrl && (
+                    <div style={{ marginTop: '6px', fontSize: '0.8rem' }}>
+                      <a href={editFormData.idProofImageUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--mango-yellow)', textDecoration: 'underline' }}>
+                        🔗 Preview Current Document
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 4: Payment Details */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--mango-yellow)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
+                  💳 Fee &amp; Payment Verification
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                  <div className="form-group">
+                    <label>Registration Fee Paid (₹)</label>
+                    <input
+                      type="number"
+                      value={editFormData.amountPaid !== undefined ? editFormData.amountPaid : 500}
+                      onChange={(e) => handleEditFieldChange('amountPaid', Number(e.target.value))}
+                      className="form-input"
+                      placeholder="500"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Bank Name / UPI UTR / Ref</label>
+                    <input
+                      type="text"
+                      value={editFormData.bankDetails || ''}
+                      onChange={(e) => handleEditFieldChange('bankDetails', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. HDFC Bank / UPI Ref 410294829"
+                    />
+                  </div>
+                </div>
+                <div className="form-group" style={{ marginTop: '14px' }}>
+                  <label>Payment Proof Screenshot URL</label>
+                  <input
+                    type="url"
+                    value={editFormData.proofImageUrl || ''}
+                    onChange={(e) => handleEditFieldChange('proofImageUrl', e.target.value)}
+                    className="form-input"
+                    placeholder="https://res.cloudinary.com/..."
+                  />
+                  {editFormData.proofImageUrl && (
+                    <div style={{ marginTop: '6px', fontSize: '0.8rem' }}>
+                      <a href={editFormData.proofImageUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--mango-yellow)', textDecoration: 'underline' }}>
+                        🔗 Preview Current Screenshot
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 5: Purpose & Notes */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--mango-yellow)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
+                  📝 Additional Notes &amp; Objectives
+                </h4>
+                <div className="form-group">
+                  <label>Purpose of Joining</label>
+                  <textarea
+                    rows={2}
+                    value={editFormData.purposeOfJoining || ''}
+                    onChange={(e) => handleEditFieldChange('purposeOfJoining', e.target.value)}
+                    className="form-input"
+                    placeholder="e.g. Starting a cloud kitchen / home chef business"
+                  />
+                </div>
+                <div className="form-group" style={{ marginTop: '14px' }}>
+                  <label>Admin Internal Notes</label>
+                  <textarea
+                    rows={2}
+                    value={editFormData.adminNotes || ''}
+                    onChange={(e) => handleEditFieldChange('adminNotes', e.target.value)}
+                    className="form-input"
+                    placeholder="Private notes (visible only to admin)"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingApplicant(null)}
+                  className="btn-outline"
+                  style={{ padding: '8px 20px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="btn-primary btn-mango"
+                  style={{ padding: '8px 24px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {isSavingEdit ? <LoadingOutlined spin /> : <CheckOutlined />}
+                  <span>{isSavingEdit ? 'Saving Changes...' : 'Save Changes'}</span>
+                </button>
+              </div>
+            </form>
           )}
         </Modal>
       </ConfigProvider>
