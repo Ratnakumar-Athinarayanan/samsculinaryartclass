@@ -74,9 +74,16 @@ export default async function handler(req, res) {
       tags: ['sams_culinary', 'onboarding_proof']
     });
 
+    // Cloudinary blocks direct delivery of .pdf URLs by default (401 ACL failure).
+    // Converting format/extension to .png delivers crystal-clear 200 OK document rendering in all browsers.
+    let finalUrl = uploadResult.secure_url;
+    if (uploadResult.format === 'pdf' || (finalUrl && /\.pdf$/i.test(finalUrl))) {
+      finalUrl = finalUrl.replace(/\.pdf$/i, '.png');
+    }
+
     return res.status(200).json({
       success: true,
-      url: uploadResult.secure_url,
+      url: finalUrl,
       publicId: uploadResult.public_id,
       format: uploadResult.format,
       bytes: uploadResult.bytes

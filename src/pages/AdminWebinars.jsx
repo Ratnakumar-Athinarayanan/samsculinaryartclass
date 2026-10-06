@@ -95,6 +95,16 @@ export default function AdminWebinars() {
   const [editFormData, setEditFormData] = useState({});
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Cloudinary blocks direct delivery of .pdf URLs with 401 deny on default accounts.
+  // Converting .pdf to .png delivers crystal-clear 200 OK document rendering across all browsers.
+  const getSafeMediaUrl = (url) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.includes('cloudinary.com') && /\.pdf$/i.test(url)) {
+      return url.replace(/\.pdf$/i, '.png');
+    }
+    return url;
+  };
+
   // Responsive Theme Detection (Light vs Dark Mode)
   const [isDarkMode, setIsDarkMode] = useState(() =>
     typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : true
@@ -1341,18 +1351,18 @@ export default function AdminWebinars() {
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <button
                                       type="button"
-                                      onClick={() => setDocPreviewModal({ open: true, url: app.idProofImageUrl, title: `${app.name} - ${app.idProofType || 'ID'} Proof Document` })}
+                                      onClick={() => setDocPreviewModal({ open: true, url: getSafeMediaUrl(app.idProofImageUrl), title: `${app.name} - ${app.idProofType || 'ID'} Proof Document` })}
                                       style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex' }}
                                       title={`Click to view ${app.idProofType || 'ID'} Proof`}
                                     >
                                       <img
-                                        src={app.idProofImageUrl.toLowerCase().endsWith('.pdf') && app.idProofImageUrl.includes('cloudinary.com') ? app.idProofImageUrl.replace(/\.pdf$/i, '.jpg') : app.idProofImageUrl}
+                                        src={getSafeMediaUrl(app.idProofImageUrl)}
                                         alt="ID Proof thumb"
                                         style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '6px', border: isDarkMode ? '1.5px solid #22c55e' : '1.5px solid #16a34a', cursor: 'pointer' }}
                                       />
                                     </button>
                                     <span style={{ fontSize: '0.74rem', color: isDarkMode ? '#4ade80' : '#15803d', fontWeight: '700' }}>
-                                      🪪 {app.idProofType || 'ID Proof'}{app.idProofImageUrl.toLowerCase().endsWith('.pdf') ? ' (PDF)' : ''}
+                                      🪪 {app.idProofType || 'ID Proof'}
                                     </span>
                                   </div>
                                 ) : (
@@ -1654,7 +1664,7 @@ export default function AdminWebinars() {
                       <div>
                         <div style={{ borderRadius: '8px', overflow: 'hidden', border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', marginBottom: '10px', height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0b100c' }}>
                           <Image
-                            src={selectedApplicant.idProofImageUrl.toLowerCase().endsWith('.pdf') && selectedApplicant.idProofImageUrl.includes('cloudinary.com') ? selectedApplicant.idProofImageUrl.replace(/\.pdf$/i, '.jpg') : selectedApplicant.idProofImageUrl}
+                            src={getSafeMediaUrl(selectedApplicant.idProofImageUrl)}
                             alt={`${selectedApplicant.idProofType} Document`}
                             style={{ maxWidth: '100%', maxHeight: '180px', objectFit: 'contain' }}
                             preview={{
@@ -1670,7 +1680,7 @@ export default function AdminWebinars() {
                           type="button"
                           onClick={() => setDocPreviewModal({
                             open: true,
-                            url: selectedApplicant.idProofImageUrl,
+                            url: getSafeMediaUrl(selectedApplicant.idProofImageUrl),
                             title: `${selectedApplicant.name} - ${selectedApplicant.idProofType || 'ID'} Proof Document`
                           })}
                           className="btn-outline"
@@ -1830,7 +1840,17 @@ export default function AdminWebinars() {
                 e.preventDefault();
                 handleSaveEdit();
               }}
-              style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxHeight: '75vh', overflowY: 'auto', paddingRight: '6px', paddingTop: '8px' }}
+              className="custom-admin-scrollbar"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '18px',
+                maxHeight: '75vh',
+                overflowY: 'auto',
+                paddingRight: '10px',
+                paddingTop: '8px',
+                colorScheme: isDarkMode ? 'dark' : 'light'
+              }}
             >
               {/* Section 1: Basic Information */}
               <div>
@@ -1994,7 +2014,7 @@ export default function AdminWebinars() {
                   />
                   {editFormData.idProofImageUrl && (
                     <div style={{ marginTop: '6px', fontSize: '0.8rem' }}>
-                      <a href={editFormData.idProofImageUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--mango-yellow)', textDecoration: 'underline' }}>
+                      <a href={getSafeMediaUrl(editFormData.idProofImageUrl)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--mango-yellow)', textDecoration: 'underline' }}>
                         🔗 Preview Current Document
                       </a>
                     </div>
@@ -2129,24 +2149,38 @@ export default function AdminWebinars() {
         >
           {docPreviewModal.url && (
             <div style={{ textAlign: 'center', padding: '12px 0' }}>
-              <div style={{ borderRadius: '10px', overflow: 'hidden', background: isDarkMode ? '#0a0f0b' : '#f8fafc', border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '260px', maxHeight: '70vh' }}>
-                {docPreviewModal.url.toLowerCase().endsWith('.pdf') ? (
+              <div
+                className="custom-admin-scrollbar"
+                style={{
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  background: isDarkMode ? '#0a0f0b' : '#f8fafc',
+                  border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: '260px',
+                  maxHeight: '70vh',
+                  colorScheme: isDarkMode ? 'dark' : 'light'
+                }}
+              >
+                {!docPreviewModal.url.includes('cloudinary.com') && docPreviewModal.url.toLowerCase().endsWith('.pdf') ? (
                   <iframe
                     src={docPreviewModal.url}
                     title={docPreviewModal.title}
-                    style={{ width: '100%', height: '65vh', border: 'none', background: '#ffffff' }}
+                    style={{ width: '100%', height: '65vh', border: 'none', background: isDarkMode ? '#0a0f0b' : '#ffffff' }}
                   />
                 ) : (
                   <img
-                    src={docPreviewModal.url}
-                    alt={docPreviewModal.title}
+                    src={getSafeMediaUrl(docPreviewModal.url)}
+                    alt={docPreviewModal.title || 'Document Preview'}
                     style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain' }}
                   />
                 )}
               </div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '16px' }}>
                 <a
-                  href={docPreviewModal.url}
+                  href={getSafeMediaUrl(docPreviewModal.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-primary btn-mango"

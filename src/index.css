@@ -3903,25 +3903,140 @@ textarea::placeholder {
   -webkit-overflow-scrolling: touch;
 }
 
-.modal-body::-webkit-scrollbar,
-.gmail-body-content::-webkit-scrollbar {
-  width: 6px;
+/* ============================================================
+   GLOBAL & DARK MODE SCROLLBAR SYSTEM
+   Fixes white scrollbar track/background in dark mode across all browsers
+   ============================================================ */
+
+/* Enforce native dark color scheme on root and all dark elements */
+html.dark,
+body.dark,
+.dark,
+.dark .ant-modal-content,
+.dark .ant-modal-wrap,
+.dark .ant-modal,
+.dark [class*="modal"] {
+  color-scheme: dark !important;
 }
 
-.modal-body::-webkit-scrollbar-track,
-.gmail-body-content::-webkit-scrollbar-track {
-  background: transparent;
+html:not(.dark),
+body:not(.dark) {
+  color-scheme: light;
 }
 
-.modal-body::-webkit-scrollbar-thumb,
-.gmail-body-content::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.25);
+/* Custom Scrollbars for Dark Mode - Neutral default grey thumb on dark background */
+.dark ::-webkit-scrollbar,
+html.dark ::-webkit-scrollbar,
+body.dark ::-webkit-scrollbar,
+.dark::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background-color: #121913 !important;
+}
+
+.dark ::-webkit-scrollbar-track,
+html.dark ::-webkit-scrollbar-track,
+body.dark ::-webkit-scrollbar-track,
+.dark::-webkit-scrollbar-track {
+  background: #121913 !important;
+  border-radius: 6px;
+}
+
+.dark ::-webkit-scrollbar-thumb,
+html.dark ::-webkit-scrollbar-thumb,
+body.dark ::-webkit-scrollbar-thumb,
+.dark::-webkit-scrollbar-thumb {
+  background: #52525b !important; /* Neutral default grey */
+  border-radius: 6px;
+  border: 2px solid #121913 !important;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover,
+html.dark ::-webkit-scrollbar-thumb:hover,
+body.dark ::-webkit-scrollbar-thumb:hover,
+.dark::-webkit-scrollbar-thumb:hover {
+  background: #71717a !important; /* Lighter grey on hover */
+}
+
+.dark ::-webkit-scrollbar-corner,
+html.dark ::-webkit-scrollbar-corner,
+body.dark ::-webkit-scrollbar-corner,
+.dark::-webkit-scrollbar-corner {
+  background: #121913 !important;
+}
+
+/* Firefox standard scrollbars for dark mode */
+html.dark,
+body.dark,
+.dark {
+  scrollbar-color: #52525b #121913;
+}
+
+/* Light mode custom scrollbars */
+html:not(.dark) ::-webkit-scrollbar,
+body:not(.dark) ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background-color: #f1f5f9;
+}
+
+html:not(.dark) ::-webkit-scrollbar-track,
+body:not(.dark) ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb,
+body:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb:hover,
+body:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+html:not(.dark),
+body:not(.dark) {
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+/* Specific styling for custom admin scrollbars */
+.custom-admin-scrollbar {
+  scrollbar-width: thin !important;
+}
+
+.custom-admin-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.dark .custom-admin-scrollbar,
+.custom-admin-scrollbar.dark {
+  scrollbar-color: #52525b #121913 !important;
+}
+
+.dark .custom-admin-scrollbar::-webkit-scrollbar,
+.custom-admin-scrollbar.dark::-webkit-scrollbar {
+  background: #121913 !important;
+}
+
+.dark .custom-admin-scrollbar::-webkit-scrollbar-track,
+.custom-admin-scrollbar.dark::-webkit-scrollbar-track {
+  background: #121913 !important;
+}
+
+.dark .custom-admin-scrollbar::-webkit-scrollbar-thumb,
+.custom-admin-scrollbar.dark::-webkit-scrollbar-thumb {
+  background: #52525b !important;
   border-radius: 4px;
 }
 
-.dark .modal-body::-webkit-scrollbar-thumb,
-.dark .gmail-body-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
+.dark .custom-admin-scrollbar::-webkit-scrollbar-thumb:hover,
+.custom-admin-scrollbar.dark::-webkit-scrollbar-thumb:hover {
+  background: #71717a !important;
 }
 
 .modal-footer {
@@ -5193,22 +5308,29 @@ textarea::placeholder {
 }
 
 /* Admin Major Section Navigation Tabs (Tab Style, not button) */
-.admin-major-tabs-nav {
+.admin-major-tabs-nav,
+.dark .admin-major-tabs-nav {
   display: flex;
   gap: 32px;
   margin-bottom: 28px;
   border-bottom: 2px solid rgba(25, 65, 33, 0.12);
   position: relative;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 .dark .admin-major-tabs-nav {
   border-bottom: 2px solid rgba(255, 255, 255, 0.08);
 }
 
-.admin-major-tabs-nav::-webkit-scrollbar {
-  display: none;
+.admin-major-tabs-nav::-webkit-scrollbar,
+.dark .admin-major-tabs-nav::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .admin-major-tab-btn {
